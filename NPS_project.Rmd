@@ -1,0 +1,39 @@
+---
+title: "NPS project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(openxlsx)
+library(roahd)
+nrg_balances=read.xlsx('complete_energy_balances.xlsx',sheet=4)
+View(nrg_balances)
+```
+
+```{r}
+nrg_balances=nrg_balances[7:50,]    #quit useless rows
+colnames(nrg_balances)=nrg_balances[1,] #use years as columns names
+nrg_balances=nrg_balances[-1,] #first row now is useless
+rownames(nrg_balances)=nrg_balances[,1] #use countries as row names
+nrg_balances=nrg_balances[,-1] #first colum is now useless
+
+```
+
+Let's quit empty values, signaled with the caharacter ":"
+```{r}
+nrg_balances=nrg_balances[!nrg_balances[,1]==':',]
+```
+
+A first plot of total energy consumption
+```{r}
+matplot(colnames(nrg_balances),t(nrg_balances[4:38,]),type='l',xlab="Year",ylab="Thousand tonnes of oil equivalent")
+```
+```{r}
+percentage_renew=read.xlsx('percentage_renewables.xlsx')
+View(percentage_renew)
+```
+
