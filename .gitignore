@@ -40,3 +40,6 @@ vignettes/*.pdf
 
 # Ignore data directory as it will not be able to be uploaded
 data/
+
+# Note necessary for this simple project
+*.Rproj
