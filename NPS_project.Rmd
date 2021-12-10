@@ -21,7 +21,7 @@ seed=1234
 
 
 ```{r}
-nrg_balances=read.xlsx('complete_energy_balances.xlsx',sheet=4)
+nrg_balances=read.xlsx('complete_energy_balances.xlsx',sheet=1)
 View(nrg_balances)
 ```
 

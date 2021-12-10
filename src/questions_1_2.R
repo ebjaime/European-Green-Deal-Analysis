@@ -11,8 +11,8 @@ library(ggplot2)
 
 
 # Depth measures packages
-# library(DepthProc)
-# library(robustbase)
+#library(DepthProc)
+#library(robustbase)
 
 B <- 100000
 seed <- 42
@@ -20,10 +20,11 @@ seed <- 42
 
 # Load datasets
 # REVIEW: Qué hoja de cada xlsx??
-energy.balances <- read.xlsx("data/complete_energy_balances.xlsx")
-consump.fossils <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx")
-consump.oil.petr <- read.xlsx("data/consumption_oil_petroleum.xlsx")
-consump.renew <- read.xlsx("data/consumption_renewables.xlsx")
+energy.balances <- read.xlsx("data/complete_energy_balances.xlsx") #first sheet should be the best,
+                                                            # even if in the presentation we chose the fourth
+consump.fossils <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx") #first sheet
+consump.oil.petr <- read.xlsx("data/consumption_oil_petroleum.xlsx") #first sheet
+consump.renew <- read.xlsx("data/consumption_renewables.xlsx") #sum all sheets
 percent.renew <- read.xlsx("data/percentage_renewables.xlsx")
 prod.by.fuel <- read.xlsx("data/production_capacities_by_fuel.xlsx")
 
@@ -48,7 +49,7 @@ preprocess <- function(df, rm_nrows=6) {
     df[] <- lapply(df, as.numeric)
     
     # Transpose to get years as columns
-    df.t <- as.data.frame(t(df))
+    df.t <- as.data.frame(t(df))       #why transpose?
     return(df.t)
 }
 
@@ -63,14 +64,14 @@ consump.renew.p   <- preprocess(consump.renew)
 # Example of energy balances
 p_italy <- ggplot(data=energy.balances.p, aes(x=year, y=Italy)) +
             labs(title="Energy Balances Progression - Italy", 
-                 subtitle="Available for final consumption") +
+                 subtitle="Gross Available Energy") +
             xlab("Year") + ylab("Thousand tonnes of oil equivalent") +
             geom_point() +
             geom_smooth(method="loess", formula=y~x, fill="blue", colour="darkblue", size=1)
 p_italy
 
 # Example of consumption of solid fossil fuels
-p_sweden <- ggplot(data=energy.balances.p, aes(x=year, y=Sweden)) +
+p_sweden <- ggplot(data=energy.balances.p, aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
             labs(title="Consumption Solid Fossil Fuels - Sweden", 
                  subtitle="Fuel consumption - energy use") +
             xlab("Year") + ylab("Thousand tonnes of oil equivalent") +
@@ -327,7 +328,7 @@ boxplot(consump.renew.countries[c12],
         main="Consumption of Renewables", xlab="Countries", 
         ylab="Terajoule")
 
-# Create matrices for easch country
+# Create matrices for each country
 t1 <- cbind(energy.balances.countries[country1], 
             consump.fossils.countries[-1,country1],
             consump.oil.petr.countries[-1,country1],
@@ -452,6 +453,9 @@ matlines(year.grid, se.bands, lwd =1, col =" blue", lty =3)
 
 # REVIEW: Try Step regression / local regression before GAM? 
 
+# REVIEW: Try to make a gam model with renewables consumption as response variable and oil, fossil fuels and years
+# as covariates.
+
 # GAM
 consump.nonr <- cbind(consump.fossils.p$year,
                       consump.fossils.p$`European Union - 27 countries (from 2020)`,
@@ -461,7 +465,7 @@ colnames(consump.nonr) <- c("year", "eu_fossils", "eu_oil_petr")
 
 
 consump.nonr.gam <- gam(year ~ s(eu_fossils, bs="tp") + s(eu_oil_petr, bs="tp"),
-                           data = consump.nonr)
+                           data = consump.nonr) 
 summary(consump.nonr.gam)
 
 hist(consump.nonr.gam$residuals)
@@ -515,4 +519,12 @@ with(consump.nonr,points3d(eu_fossils, eu_oil_petr, year,col='black',size=5))
 # TODO: Analyze, for each country,  the percentage of energy produced
 # by renewable sources over the total energy  produced
 
+# dividir en regiones y luego tomar la region mejor y comparar los paises de esa region
+north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
+
+east_europe=c("Bulgaria","Czechia","Croatia","Hungary","Poland","Romania","Slovenia","Slovakia","North Macedonia","Albania","Serbia","Turkey","Ukraine")
+
+south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal")
+
+central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
 
