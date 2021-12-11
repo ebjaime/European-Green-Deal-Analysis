@@ -449,7 +449,7 @@ matlines(year.grid, se.bands, lwd =1, col =" blue", lty =3)
 # REVIEW: Bootstrap - make inference about parameters ?
 
 
-# Nonparametric regression on fossils and oil+petroleum consuption
+# Nonparametric regression on fossils and oil+petroleum consumption
 
 # REVIEW: Try Step regression / local regression before GAM? 
 
