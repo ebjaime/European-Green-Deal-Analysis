@@ -522,9 +522,9 @@ with(consump.nonr,points3d(eu_fossils, eu_oil_petr, year,col='black',size=5))
 # dividir en regiones y luego tomar la region mejor y comparar los paises de esa region
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
-east_europe=c("Bulgaria","Czechia","Croatia","Hungary","Poland","Romania","Slovenia","Slovakia","North Macedonia","Albania","Serbia","Turkey","Ukraine")
+east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
 
-south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal")
+south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
 
 central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
 
