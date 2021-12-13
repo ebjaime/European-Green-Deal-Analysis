@@ -253,7 +253,7 @@ p_val
 # 1b. Two way permutational ANOVA - Oil & Petr. consumption + Renewables to represent Energy Balances 
 
 # For each country we obtain a different ANOVA. 
-aov_Belgium <- aov(energy.balances.countries$Belgium ~ consump.oil.petr.countries$Belgium[-1] + 
+aov_Belgium <- aov(energy.balances.countries$Belgium ~ consump.oil.petr.countries$Belgium[-1] +      #are these factors? Maybe a linear model should make more sense
                                         consump.renew.countries$Belgium[-1] +
                                         consump.renew.countries$Belgium[-1]:consump.oil.petr.countries$Belgium[-1])
 summary(aov_Belgium)
