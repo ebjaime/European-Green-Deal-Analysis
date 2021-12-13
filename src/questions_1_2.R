@@ -20,20 +20,24 @@ seed <- 42
 
 # Load datasets
 # REVIEW: QuÃ© hoja de cada xlsx??
-energy.balances <- read.xlsx("data/complete_energy_balances.xlsx") #first sheet should be the best,
+energy.balances <- read.xlsx("data/complete_energy_balances.xlsx",sheet=1) #first sheet should be the best,
                                                             # even if in the presentation we chose the fourth
-consump.fossils <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx") #first sheet
-consump.oil.petr <- read.xlsx("data/consumption_oil_petroleum.xlsx") #first sheet
-consump.renew <- read.xlsx("data/consumption_renewables.xlsx") #sum all sheets
+consump.fossils <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx",sheet=1) #first sheet
+consump.oil.petr <- read.xlsx("data/consumption_oil_petroleum.xlsx",sheet=1) #first sheet
+consump.renew.1 <- read.xlsx("data/consumption_renewables.xlsx",sheet=1)
+consump.renew.2 <- read.xlsx("data/consumption_renewables.xlsx",sheet=2)
+consump.renew.3 <- read.xlsx("data/consumption_renewables.xlsx",sheet=3)
+consump.renew.4 <- read.xlsx("data/consumption_renewables.xlsx",sheet=4)
+consump.renew.5 <- read.xlsx("data/consumption_renewables.xlsx",sheet=5) #sum all sheets
 percent.renew <- read.xlsx("data/percentage_renewables.xlsx")
 prod.by.fuel <- read.xlsx("data/production_capacities_by_fuel.xlsx")
 
 
 # Function cleans df removing NAN rows, setting values as numeric...
-preprocess <- function(df, rm_nrows=6) {
+preprocess <- function(df, rm_nrows=6, end_nrows=2) { #end_nrows is the number of rows at the end to quit
     
     # Remove first rows not containing significant data
-    df <- df[-c(1:rm_nrows),]
+    df <- df[-c(1:rm_nrows,(dim(df)[1]-(end_nrows-1)):dim(df)[1]),]
     
     # colnames(energy.balances) <- energy.balances[1,]
     # energy.balances <- energy.balances[-1,]
@@ -43,22 +47,49 @@ preprocess <- function(df, rm_nrows=6) {
     rownames(df)[1] <- "year"
     
     # Remove rows with NA values 
-    df <- na.omit(df)
+    #df <- na.omit(df)
+    df=df[!df[,1]==':',]
+    
     
     # REVIEW: Change cells to numeric. How many decimals??
     df[] <- lapply(df, as.numeric)
     
     # Transpose to get years as columns
-    df.t <- as.data.frame(t(df))       #why transpose?
-    return(df.t)
+    #df.t <- as.data.frame(t(df))       #why transpose?
+    return(df)
 }
 
 
 
 energy.balances.p <- preprocess(energy.balances)
-consump.fossils.p <- preprocess(consump.fossils)
-consump.oil.petr.p <- preprocess(consump.oil.petr)
-consump.renew.p   <- preprocess(consump.renew)
+consump.fossils.p <- preprocess(consump.fossils[,-32]) #no 2020
+consump.oil.petr.p <- preprocess(consump.oil.petr[-32]) #no 2020
+
+
+consump.renew.1.p   <- preprocess(consump.renew.1)
+consump.renew.2.p <- preprocess(consump.renew.2)
+consump.renew.3.p <- preprocess(consump.renew.3)
+consump.renew.4.p <- preprocess(consump.renew.4)
+consump.renew.5.p <- preprocess(consump.renew.5)
+
+consump.renew.p=consump.renew.1.p
+for (j in 2:39){
+    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.2.p[,j]
+}
+
+for (j in 2:39){
+    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.3.p[,j]
+}
+for (j in 2:39){
+    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.4.p[,j]
+}
+for (j in 2:39){
+    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.5.p[,j]
+}
+
+
+consump.renew.p=consump.renew.p[-31,]
+View(consump.renew.p)
 
 # Visualize data examples
 # Example of energy balances
@@ -71,9 +102,9 @@ p_italy <- ggplot(data=energy.balances.p, aes(x=year, y=Italy)) +
 p_italy
 
 # Example of consumption of solid fossil fuels
-p_sweden <- ggplot(data=energy.balances.p, aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
+p_sweden <- ggplot(data=consump.fossils.p, aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
             labs(title="Consumption Solid Fossil Fuels - Sweden", 
-                 subtitle="Fuel consumption - energy use") +
+                 subtitle="Inland consumption") +
             xlab("Year") + ylab("Thousand tonnes of oil equivalent") +
             geom_point() +
             geom_smooth(method="loess", formula=y~x, fill="red", colour="darkred", size=1)
@@ -100,18 +131,18 @@ consump.renew.countries <- consump.renew.p[,-c(1,2,3,4)]
 # Graphics
 
 matplot(seq(year.min, year.max.1), energy.balances.countries, type="l", lty=1,
-        main="Energy Balances EU 1990 - 2020", xlab="Year", ylab="Thousand tonnes of oil equivalent")
+        main="Energy Balances EU 1990 - 2019", xlab="Year", ylab="Thousand tonnes of oil equivalent")
 
 matplot(seq(year.min, year.max.2), consump.fossils.countries, type="l", lty=1,
-        main="Consumption of solid fossil fuels EU 1990 - 2020", xlab="Year",
+        main="Consumption of solid fossil fuels EU 1990 - 2019", xlab="Year",
         ylab="Thousand tonnes (solid fossil fuels)")
 
 matplot(seq(year.min, year.max.2), consump.oil.petr.countries, type="l", lty=1,
-        main="Consumption of Oil and Petroleum EU 1990 - 2020", xlab="Year",
+        main="Consumption of Oil and Petroleum EU 1990 - 2019", xlab="Year",
         ylab="Thousand tonnes (oil and petroleum products)")
 
 matplot(seq(year.min, year.max.2), consump.oil.petr.countries, type="l", lty=1,
-        main="Consumption of Oil and Petroleum EU 1990 - 2020", xlab="Year",
+        main="Consumption of Oil and Petroleum EU 1990 - 2019", xlab="Year",
         ylab="Terajoules")
 
 boxplot(energy.balances.countries, main="Boxplot Energy Balances", xlab="Countries", 
@@ -146,9 +177,9 @@ consump.fossils.mean <- rowMeans(consump.fossils.countries, na.rm=T)
 consump.oil.petr.mean <- rowMeans(consump.oil.petr.countries, na.rm=T)
 consump.renew.mean <- rowMeans(consump.renew.countries, na.rm=T)
 
-matplot(seq(year.min, year.max.2), consump.fossils.mean, type="l")
-matplot(seq(year.min, year.max.2), consump.oil.petr.mean, type="l")
-matplot(seq(year.min, year.max.2), consump.renew.mean, type="l")
+matplot(seq(year.min, year.max.2), consump.fossils.mean, type="l",main="Consumption fossil fuels mean")
+matplot(seq(year.min, year.max.2), consump.oil.petr.mean, type="l",main="Consumption oil and petroleum mean")
+matplot(seq(year.min, year.max.2), consump.renew.mean, type="l",main="Consumption renewables mean")
 
 # Renewable consumption is very different from oil & petr. and fossil fuels consumption
 # But do these last two follow the same distribution?
@@ -199,7 +230,9 @@ p_val
 
 # Does the inverse renew. consumption follow the same distribution as fossils or oil & petr. consumption?
 # (supposing distribution of consump. of oil & petr = distribution of consump. fossils)
-matplot(seq(year.min, year.max.2), -consump.renew.mean)
+
+#matplot(seq(year.min, year.max.2), -consump.renew.mean,type="l")
+matplot(seq(year.max.2,year.min), consump.renew.mean,type="l") #consumicion inversa
 
 consump.renew.countries.neg <- -consump.renew.countries
 consump.renew.mean.neg <- -consump.renew.mean
@@ -253,9 +286,10 @@ p_val
 # 1b. Two way permutational ANOVA - Oil & Petr. consumption + Renewables to represent Energy Balances 
 
 # For each country we obtain a different ANOVA. 
-aov_Belgium <- aov(energy.balances.countries$Belgium ~ consump.oil.petr.countries$Belgium[-1] + 
-                                        consump.renew.countries$Belgium[-1] +
-                                        consump.renew.countries$Belgium[-1]:consump.oil.petr.countries$Belgium[-1])
+
+aov_Belgium <- aov(energy.balances.countries$Belgium ~ consump.oil.petr.countries$Belgium +       #are these factors? Maybe a linear model should make more sense
+                                        consump.renew.countries$Belgium +
+                                        consump.renew.countries$Belgium:consump.oil.petr.countries$Belgium)
 summary(aov_Belgium)
 
 # We can calculate for the total of the 27 members of the EU:
@@ -329,15 +363,15 @@ boxplot(consump.renew.countries[c12],
         ylab="Terajoule")
 
 # Create matrices for each country
-t1 <- cbind(energy.balances.countries[country1], 
-            consump.fossils.countries[-1,country1],
-            consump.oil.petr.countries[-1,country1],
-            consump.renew.countries[-1,country1])
+t1 <- cbind(energy.balances.countries[,country1], 
+            consump.fossils.countries[,country1],  #quit -1
+            consump.oil.petr.countries[,country1], #quit -1
+            consump.renew.countries[,country1])    #quit -1
 
 t2 <- cbind(energy.balances.countries[country2], 
-            consump.fossils.countries[-1,country2],
-            consump.oil.petr.countries[-1,country2],
-            consump.renew.countries[-1,country2])
+            consump.fossils.countries[,country2],
+            consump.oil.petr.countries[,country2],
+            consump.renew.countries[,country2])
 # Calculate means per consumption
 t1.mean <- colMeans(t1)
 t2.mean <- colMeans(t2)
@@ -507,7 +541,7 @@ with(consump.nonr,points3d(eu_fossils, eu_oil_petr, year,col='black',size=5))
 
 
 #######################
-# 2.
+# 2.  Estamos trabajando aquì
 #######################
 # Which countries are more projected to switch to renewable energy?
 
@@ -522,9 +556,19 @@ with(consump.nonr,points3d(eu_fossils, eu_oil_petr, year,col='black',size=5))
 # dividir en regiones y luego tomar la region mejor y comparar los paises de esa region
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
-east_europe=c("Bulgaria","Czechia","Croatia","Hungary","Poland","Romania","Slovenia","Slovakia","North Macedonia","Albania","Serbia","Turkey","Ukraine")
+east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
 
-south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal")
+south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
 
 central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
+
+percent.renew.p <- preprocess(percent.renew,5) #use it to clean useless row
+View(percent.renew.p)
+colnames(percent.renew.p)=seq(2004,2019)
+percent.renew.p=percent.renew.p[-1,]
+
+sigle=c("Eu 27","Eu 28","Ea 19","BE","BG","CZ","DK","DE","EE","IE","GR","ES","FR","HR","IT","CY","LV","LT","LU",
+        "HU","MT","NL","AT","PL","PT","RO","SI","SK","FI","SE","IS","NO","UK","MK","AL","RS","BA","XZ","MD")
+rownames(percent.renew.p)=sigle
+boxplot(t(percent.renew.p[4:39,]),main="Boxplot renewable energy percentage",ylab="Percentage",xlab="Country")
 

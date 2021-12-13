@@ -322,6 +322,24 @@ matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
 
 Import datasets about electricity network capacity
 
+Total capacity:
+```{r}
+total_capacity=read.xlsx('production_capacities_by_fuel.xlsx',sheet=1)
+#View(total_capacity)
+total_capacity=total_capacity[7:51,]    #quit useless rows
+colnames(total_capacity)=total_capacity[1,] #use years as columns names
+total_capacity=total_capacity[-1,] #first row now is useless
+rownames(total_capacity)=total_capacity[,1] #use countries as row names
+total_capacity=total_capacity[,-1] #first column is now useless
+
+total_capacity=total_capacity[!total_capacity[,1]==':',]
+View(total_capacity)
+total_capacity[] <- lapply(total_capacity, as.numeric)
+
+matplot(colnames(total_capacity),t(total_capacity[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Total electricity capacity")
+```
+
+
 Combustible fuels:
 ```{r}
 capacity_comb_fuels=read.xlsx('production_capacities_by_fuel.xlsx',sheet=2)
@@ -341,15 +359,17 @@ capacity_comb_fuels=capacity_comb_fuels[,-1] #first column is now useless
 capacity_comb_fuels=capacity_comb_fuels[!capacity_comb_fuels[,1]==':',]
 View(capacity_comb_fuels)
 capacity_comb_fuels[] <- lapply(capacity_comb_fuels, as.numeric)
+
+no_total_cf=capacity_comb_fuels[4:38,] #first three rows are total european statistics
 ```
 
 
 ```{r}
-matplot(colnames(capacity_comb_fuels),t(capacity_comb_fuels[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacity from combustible fossil fuels")
+matplot(colnames(no_total_cf),t(no_total_cf),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacity from combustible fuels")
 ```
 
 ```{r}
-rownames(capacity_comb_fuels)[which.max(capacity_comb_fuels[4:38,30])+3] #first three rows are total european statistics
+rownames(no_total_cf)[which.max(no_total_cf[,30])] 
 ```
 Now for renewables we are going to sum all the capacities from all the (renewable) fuels
 
@@ -453,21 +473,28 @@ for (j in 1:30){
 
 
 ```{r}
-matplot(colnames(capacity_renew_fuels_no_nuclear),t(capacity_renew_fuels_no_nuclear[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (no nuclear)")
+no_total_no_nuclear=capacity_renew_fuels_no_nuclear[4:38,]
+
+
+matplot(colnames(no_total_no_nuclear),t(no_total_no_nuclear),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (no nuclear)")
 ```
 Let's compute the median curve and plot it
 ```{r}
-band_depth <- BD(Data = capacity_renew_fuels_no_nuclear[4:38,])
-modified_band_depth <- MBD(Data = capacity_renew_fuels_no_nuclear[4:38,])
+band_depth <- BD(Data = no_total_no_nuclear)
+modified_band_depth <- MBD(Data = no_total_no_nuclear)
 
 #median_curve <- median_fData(fData = capacity_renew_fuels_no_nuclear, type = "MBD")
-no_total_no_nuclear=capacity_renew_fuels_no_nuclear[4:38,]
 
 median_curve_manual <- no_total_no_nuclear[which.max(modified_band_depth),]
 
 matplot(colnames(capacity_renew_fuels_no_nuclear),t(no_total_no_nuclear),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (no nuclear)")
 lines(colnames(capacity_renew_fuels_no_nuclear),median_curve_manual,col="red",lwd=5)
 ```
+
+```{r}
+rownames(no_total_no_nuclear)[which.max(no_total_no_nuclear[,30])]
+```
+
 Trying to detect outliers but can't manage to make it work
 ```{r}
 #invisible(fbplot(fdata(capacity_renew_fuels_no_nuclear[4:38,])[[1]]
@@ -479,10 +506,8 @@ Trying to detect outliers but can't manage to make it work
 Trying to perform some tests on electricity capacities (non renewables vs renewables: do they have the same distribution?)
 Two population multivariate test
 ```{r}
-B = 100000
+B = 10000
 seed = 26
-
-no_total_cf=capacity_comb_fuels[4:38,]
 
 cf.mean = colMeans(no_total_cf) #combustible fuels
 ren.mean = colMeans(no_total_no_nuclear) #renewables
@@ -614,18 +639,20 @@ lines(years,m_list[[4]]$fitted.values,col="green")
 plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
 lines(years,m_list[[7]]$fitted.values,col="green")
 ```
-Since by passing to fourth grade we only add one parameter w.r.t second grade (third grade coefficient is considered zero), we can consider the fourth grade regression
+Since by passing to fourth grade we only add one parameter w.r.t second grade (third grade coefficient is considered zero), we can consider the fourth grade regression.
+
+But we can notice that the coefficient of fourth grade is negative! It's not really reasonable for future predictions, so we stick to second grade
 
 
 ```{r}
-ren_model=m_list[[4]]
+ren_model=m_list[[2]]
 ```
 
 ```{r}
 anni=seq(range(years)[1],range(years)[2],by=0.25)
 preds=predict(comb_model,list(years=anni),se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni), ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,])),cex =.5, col =" darkgrey ",main='Degree 3 poly combustible, degree 4 poly renewables',xlab="Year",ylab="Megawatt")
+plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni), ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+5000,cex =.5, col =" darkgrey ",main='Degree 3 poly combustible, degree 4 poly renewables',xlab="Year",ylab="Megawatt")
 lines(anni,preds$fit ,lwd =2, col =" red")
 matlines (anni ,se.bands ,lwd =1, col =" red",lty =3)
 
@@ -637,6 +664,9 @@ matlines (anni ,se.bands ,lwd =1, col =" green",lty =3)
 ```
 Let's try with spline regression
 ```{r}
+anni=seq(range(years)[1],range(years)[2],by=0.25)
+
+#combustible fuels
 b=data.frame(cap=as.numeric(capacity_comb_fuels[2,]),years_b=years)
 comb_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=b )
 dat_b=data.frame(years_b=anni)
@@ -644,46 +674,51 @@ dat_b=data.frame(years_b=anni)
 preds=predict(comb_model_spline,dat_b,se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
 
-plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ",
-     main="Spline regression capacity - Combustibles",xlab="Year",ylab="Megawatt")
+plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni),
+    ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+5000,cex =.5, col =" darkgrey ",
+    main="Splines regression capacity",xlab="Year",ylab="Megawatt")
+
+legend("topleft",legend=c("Non-renewables","Renewables"),col=c(2,3),pch=1)
+
 lines(anni,preds$fit ,lwd =2, col =" red")
 matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
-```
-```{r}
+
+#renewables
 c=data.frame(cap=as.numeric(capacity_renew_fuels_no_nuclear[2,]),years_b=years)
-ren_model_spline <- lm(cap ~ bs(years_b, df=7,degree=4), data=c )
+ren_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=c )
 dat_b=data.frame(years_b=anni)
 
 preds=predict(ren_model_spline,dat_b,se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
 
-plot(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ",
-     main="Spline regression capacity - Renewables",xlab="Year",ylab="Megawatt")
+points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
 lines(anni,preds$fit ,lwd =2, col =" green")
 matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
 ```
+
 Natural splines
 ```{r}
-comb_model_spline <- lm(cap ~ ns(years_b, df=7), data=b )
+comb_model_spline <- lm(cap ~ ns(years_b, df=8), data=b )
 dat_b=data.frame(years_b=anni)
 
 preds=predict(comb_model_spline,dat_b,se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
 
-plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ",
-     main="Natural splines regression capacity - Combustibles",xlab="Year",ylab="Megawatt")
+plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni) ,ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+3000,cex =.5, col =" darkgrey ",
+     main="Natural Splines regression on European electricity capacity",xlab="Year",ylab="Megawatt")
+
+legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
+
 lines(anni,preds$fit ,lwd =2, col =" red")
 matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
-```
-```{r}
+
 ren_model_spline <- lm(cap ~ ns(years_b, df=7), data=c )
 dat_b=data.frame(years_b=anni)
 
 preds=predict(ren_model_spline,dat_b,se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
 
-plot(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ",
-     main="Natural splines regression capacity - Renewables",xlab="Year",ylab="Megawatt")
+points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
 lines(anni,preds$fit ,lwd =2, col =" green")
 matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
 ```
@@ -695,9 +730,9 @@ Set a region-based analysis of electricity capacity
 countries=rownames(no_total_no_nuclear)
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
-east_europe=c("Bulgaria","Czechia","Croatia","Hungary","Poland","Romania","Slovenia","Slovakia","North Macedonia","Albania","Serbia","Turkey","Ukraine")
+east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
 
-south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal")
+south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
 
 central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
 
@@ -772,17 +807,17 @@ This is not a meaningful result, since we are not taking into account the sizes 
 
 Let's build the ad-hoc dataframe with relative capacities of 2019
 ```{r}
-north=no_total_no_nuclear[match(north_europe,countries),30]/(capacity_comb_fuels[4:38,][match(north_europe,countries),30] + no_total_no_nuclear[match(north_europe,countries),30] )
+north=no_total_no_nuclear[match(north_europe,countries),30]/(total_capacity[4:38,][match(north_europe,countries),30])
 
-east=no_total_no_nuclear[match(east_europe,countries),30]/(capacity_comb_fuels[4:38,][match(east_europe,countries),30] + no_total_no_nuclear[match(east_europe,countries),30] )
+east=no_total_no_nuclear[match(east_europe,countries),30]/(total_capacity[4:38,][match(east_europe,countries),30])
 
-south=no_total_no_nuclear[match(south_europe,countries),30]/(capacity_comb_fuels[4:38,][match(south_europe,countries),30] + no_total_no_nuclear[match(south_europe,countries),30] )
+south=no_total_no_nuclear[match(south_europe,countries),30]/(total_capacity[4:38,][match(south_europe,countries),30])
 
-central=no_total_no_nuclear[match(central_europe,countries),30]/(capacity_comb_fuels[4:38,][match(central_europe,countries),30] + no_total_no_nuclear[match(central_europe,countries),30] )
+central=no_total_no_nuclear[match(central_europe,countries),30]/(total_capacity[4:38,][match(central_europe,countries),30])
 
-north=cbind(north,rep("North",length(north)))
+north=cbind(north,rep("Northern",length(north)))
 east=cbind(east,rep("Eastern",length(east)))
-south=cbind(south,rep("South",length(south)))
+south=cbind(south,rep("Southern",length(south)))
 central=cbind(central,rep("Central",length(central)))
 
 aov_ratio_cap=data.frame(rbind(north,east,south,central),row.names=c(north_europe,east_europe,south_europe,central_europe))
@@ -794,7 +829,7 @@ aov_ratio_cap$Region=factor(aov_ratio_cap$Region)
 attach(aov_ratio_cap)
 g=nlevels(aov_ratio_cap$Region)
 g
-boxplot(as.numeric(ratio_cap_19) ~ Region,col=rainbow(g),main="Relative electricity capacity by region",ylab="Ratio ren/total capacity")
+boxplot(as.numeric(ratio_cap_19) ~ Region,col=c("cyan1","indianred1","cornflowerblue","chartreuse1"),main="Relative renewable electricity capacity by region",ylab="Percentage")
 ```
 ```{r}
 ratio_cap_19=as.numeric(ratio_cap_19)
@@ -883,10 +918,7 @@ range(grid[pval_function>0.05])
 matplot(colnames(capacity_renew_fuels_nuclear),t(capacity_renew_fuels_nuclear[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (with nuclear)")
 ```
 
-We can see that the current most "green" country w.r.t electricity is Germany (here we are not considering nucelar energy)
-```{r}
-rownames(capacity_renew_fuels_no_nuclear)[which.max(capacity_renew_fuels_no_nuclear[4:38,30])+3] #first three rows are total european statistics
-```
+
 Even if we include nuclear, Germany is still at the top
 ```{r}
 rownames(capacity_renew_fuels_nuclear)[which.max(capacity_renew_fuels_nuclear[4:38,30])+3] #first three rows are total european statistics
