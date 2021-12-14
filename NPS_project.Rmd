@@ -16,6 +16,9 @@ library(rgl)
 library(fda.usc) #install if necessary
 library(np)
 library(splines)
+library(devtools)
+#devtools::install_github(repo="ryantibs/conformal", subdir="conformalInference")
+library(conformalInference)
 
 B=10000
 seed=1234
@@ -87,7 +90,7 @@ rownames(percentage_renew)[which(percentage_renew[4:39,16]>=40.0)+3]
 
 Total electricity production
 ```{r}
-tot_elec=read.xlsx('total_electricity_use.xlsx')
+tot_elec=read.xlsx('data/total_electricity_use.xlsx')
 View(tot_elec)
 
 tot_elec=tot_elec[7:51,]    #quit useless rows
@@ -108,7 +111,7 @@ matplot(colnames(tot_elec),t(tot_elec[4:39,]),type='l',xlab="Year",ylab="Gigawat
 Production of electricity from renewables dataset
 
 ```{r}
-use_renew_elec=read.xlsx('use_renew_elec.xlsx',sheet=1)
+use_renew_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=1)
 View(use_renew_elec)
 
 use_renew_elec=use_renew_elec[7:48,]    #quit useless rows
@@ -156,9 +159,9 @@ Let's make a test to see if the three main renewable resources have the same dis
 (MANOVA)
 
 ```{r}
-use_hydro_elec=read.xlsx('use_renew_elec.xlsx',sheet=2)
-use_wind_elec=read.xlsx('use_renew_elec.xlsx',sheet=4)
-use_solar_elec=read.xlsx('use_renew_elec.xlsx',sheet=6)
+use_hydro_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=2)
+use_wind_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=4)
+use_solar_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=6)
 
 #clean hydro
 use_hydro_elec=use_hydro_elec[7:48,]
@@ -263,7 +266,7 @@ plot(x,use_renew_elec[2,],main="Total electricity from renewables - Europe",xlab
 ```{r}
 m_cut=lm(as.numeric(use_renew_elec[2,]) ~ cut(x,breaks=10))
 
-years.grid=seq(range(x)[1],range(x)[2],by=0.25)
+years.grid=seq(range(x)[1],range(x)[2],by=0.1)
 preds=predict(m_cut,list(x=years.grid),se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
 plot(x ,as.numeric(use_renew_elec[2,]) ,xlim=range(years.grid) ,cex =.5, col =" darkgrey ",main='Custom cut Fit',xlab="Year",ylab="Gigawatt-hour")
@@ -300,7 +303,7 @@ Maybe gaussian kernel would be better?
 a=data.frame(giga=as.numeric(use_renew_elec[2,]),years_a=x)
 m_loc = npreg(giga ~ years_a,
               ckertype = 'gaussian',
-              bws = 2, # bandwidth
+              bws = 1.5, # bandwidth
               data= a)
 dat=data.frame(years_a=years.grid)
 preds=predict(m_loc,newdata=dat,se=T)
@@ -318,6 +321,233 @@ plot(
 lines(years.grid,preds$fit ,lwd =2, col =" blue")
 matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
 ```
+
+```{r}
+list_vec=flatten(use_renew_elec[4:40,])
+vec=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:16){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec=rbind(vec,v)
+}
+vec=data.frame(vec)
+colnames(vec)=c("value","year")
+
+m_loc = npreg(value ~ year,
+              ckertype = 'gaussian',
+              bws = 2, # bandwidth
+              data= vec)
+dat=data.frame(year=years.grid)
+preds=predict(m_loc,newdata=dat,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+plot(
+    vec$year,
+    vec$value ,
+    xlim = range(years.grid) ,
+    cex = .5,
+    col = " darkgrey ",
+    main = 'Local Averaging - bws2 - Gaussian kernel',
+    xlab="Year",
+    ylab="Gigawatt-hour"
+  )
+lines(years.grid,preds$fit ,lwd =2, col =" blue")
+matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
+```
+Let's try with splines
+```{r}
+model_cubic_splines <-
+  lm(value ~ bs(year, degree = 3,df = 10), data = vec)
+
+preds=predict(model_cubic_splines,dat,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+with(vec, plot(year ,value ,xlim=range(dat$year) ,cex =.5, col =" darkgrey "))
+lines(dat$year,preds$fit ,lwd =2, col =" blue")
+matlines(dat$year, se.bands ,lwd =1, col =" blue",lty =3)
+```
+
+
+
+```{r}
+library(jsonlite)
+
+list_vec=flatten(use_wind_elec[4:40,])
+vec_wind=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:16){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec_wind=rbind(vec_wind,v)
+}
+vec_wind=data.frame(vec_wind)
+colnames(vec_wind)=c("value_wind","year")
+```
+
+
+```{r}
+model_poly_wind=with(vec_wind,lm(value_wind ~ poly(year,degree=2)))
+year.grid=seq(range(vec_wind$year)[1],2024,by=0.1)
+
+preds=predict(model_poly_wind,list(year=year.grid),se=T)
+
+
+```
+
+```{r}
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=matrix(poly(vec_wind$year,degree=2),ncol=2)
+pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_wind$year,degree=2),"coefs") ),ncol=2)
+
+c_preds_wind=conformal.pred(design_matrix,vec_wind$value_wind,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_wind, plot(year ,value_wind ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Wind'))
+lines(year.grid,preds$fit ,lwd =2, col =" green")
+lines(year.grid,c_preds_wind$pred ,lwd =2, col ="red",lty=3)
+lines(year.grid,numeric(length(year.grid)),lwd=1,col="green",lty=3)
+matlines(year.grid ,c_preds_wind$up ,lwd =1, col =" green",lty =3)
+```
+```{r}
+list_vec=flatten(use_solar_elec[4:40,])
+vec_solar=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:16){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec_solar=rbind(vec_solar,v)
+}
+vec_solar=data.frame(vec_solar)
+colnames(vec_solar)=c("value_solar","year")
+```
+
+
+```{r}
+model_poly_solar=with(vec_solar,lm(value_solar ~ poly(year,degree=2)))
+year.grid=seq(range(vec_solar$year)[1],2024,by=0.1)
+
+preds=predict(model_poly_solar,list(year=year.grid),se=T)
+
+
+```
+
+```{r}
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=matrix(poly(vec_solar$year,degree=2),ncol=2)
+pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_solar$year,degree=2),"coefs") ),ncol=2)
+
+c_preds_solar=conformal.pred(design_matrix,vec_solar$value_solar,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_solar, plot(year ,value_solar ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Solar'))
+lines(year.grid,preds$fit ,lwd =2, col =" red")
+lines(year.grid,c_preds_solar$pred ,lwd =2, col ="blue",lty=3)
+lines(year.grid,numeric(length(year.grid)),lwd=1,col="red",lty=3)
+matlines(year.grid ,c_preds_solar$up ,lwd =1, col ="red",lty =3)
+```
+```{r}
+list_vec=flatten(use_hydro_elec[4:40,])
+vec_hydro=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:16){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec_hydro=rbind(vec_hydro,v)
+}
+vec_hydro=data.frame(vec_hydro)
+colnames(vec_hydro)=c("value_hydro","year")
+```
+
+
+```{r}
+model_poly_hydro=with(vec_hydro,lm(value_hydro ~ poly(year,degree=2)))
+year.grid=seq(range(vec_hydro$year)[1],2024,by=0.1)
+
+preds=predict(model_poly_hydro,list(year=year.grid),se=T)
+
+
+```
+
+```{r}
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=matrix(poly(vec_hydro$year,degree=2),ncol=2)
+pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_hydro$year,degree=2),"coefs") ),ncol=2)
+
+c_preds_hydro=conformal.pred(design_matrix,vec_hydro$value_hydro,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_hydro, plot(year ,value_hydro ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Hydro'))
+lines(year.grid,preds$fit ,lwd =2, col =" blue")
+lines(year.grid,c_preds_hydro$pred ,lwd =2, col ="green",lty=3)
+lines(year.grid,numeric(length(year.grid)),lwd=1,col="blue",lty=3)
+matlines(year.grid ,c_preds_hydro$up ,lwd =1, col =" blue",lty =3)
+```
+```{r}
+year.grid.ours=year.grid[year.grid<=2019.0]
+plot(year.grid,c_preds_hydro$pred,type="l",xlab="Year",ylab="Gigawatt-hour",main="Electricity production conformal predictions",ylim=c(0,25000),col="blue",lty=2)
+lines(year.grid,c_preds_solar$pred,col="red",lty=2)
+lines(year.grid,c_preds_wind$pred,col="green",lty=2)
+
+lines(year.grid.ours,c_preds_solar$pred[1:length(year.grid.ours)],col="red",lwd=2)
+lines(year.grid.ours,c_preds_wind$pred[1:length(year.grid.ours)],col="green",lwd=2)
+lines(year.grid.ours,c_preds_hydro$pred[1:length(year.grid.ours)],col="blue",lwd=2)
+abline(v=2019,col="black",lty=3)
+legend("topleft",legend=c("Hydro","Solar","Wind"),col=c("blue","red","green"),pch=1)
+```
+
+
+Same thing with splines
+```{r}
+br=quantile(vec_wind$year,probs = c(0.2,0.4,0.6,0.8))
+
+model_splines_wind <-
+  lm(value_wind ~ ns(year,knots = br), data = vec_wind)
+
+preds=predict(model_splines_wind,list(year=year.grid),se=T)
+
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=ns(vec_wind$year, knots=br)
+pred_grid=matrix(ns(year.grid,knots = br),nrow=length(year.grid))
+
+c_preds=conformal.pred(design_matrix,vec_wind$value_wind,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_wind, plot(year ,value_wind ,xlim=range(year.grid) ,cex =.5, col =" darkgrey ",main="Natural splines prediction"))
+lines(year.grid,preds$fit ,lwd =2, col =" blue")
+lines(year.grid,c_preds$pred ,lwd =2, col ="red",lty=3)
+matlines(year.grid ,cbind(c_preds$up,c_preds$lo) ,lwd =1, col =" blue",lty =3)
+
+
+```
+Smoothing splines?
+```{r}
+fit=smooth.spline(vec_wind$year,vec_wind$value_wind,cv=T)
+
+opt = fit$df
+opt
+fit$lambda
+
+train_ss=function(x,y,out=NULL){
+  smooth.spline(x,y,df=opt)
+}
+
+predict_ss=function(obj, new_x){
+  predict(obj,new_x)$y
+}
+
+green=train_ss(vec_wind$year,vec_wind$value_wind)
+
+#predict_ss(green,vec_wind$year)
+```
+
+```{r}
+c_preds=conformal.pred(vec_wind$year,vec_wind$value_wind,year.grid,alpha=0.05,verbose=T,train.fun = train_ss ,predict.fun = predict_ss,num.grid.pts = 200)
+
+plot(vec_wind$year ,vec_wind$value_wind,cex =.5, col =" darkgrey ",xlim=range(year))
+lines(fit,col="blue",lwd=2)
+lines(year.grid,c_preds$pred ,lwd =2, col ="red",lty=3)
+matlines(year.grid ,cbind(c_preds$up,c_preds$lo) ,lwd =1, col =" blue",lty =3)
+
+```
+
+
+
 
 
 Import datasets about electricity network capacity
