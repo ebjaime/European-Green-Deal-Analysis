@@ -9,6 +9,10 @@ library(rgl)
 library(hexbin)
 library(ggplot2)
 
+# GAM
+library(mgcv)
+library(conformalInference)
+
 
 # Depth measures packages
 #library(DepthProc)
@@ -537,8 +541,6 @@ abline(v=T30,col=3,lwd=4)
 p_val <- sum(T3>=T30)/B
 p_val
 
-# REVIEW: Could retry with Mahalannobis distance like lab 4
-
 
 # Regression to view the trend of energy consumption 
 
@@ -572,8 +574,6 @@ lines(year.grid, preds.lm.fossils$fit, lwd =2, col =" blue")
 matlines(year.grid, se.bands, lwd =1, col =" blue", lty =3)
 # Does not get very good results
 
-# REVIEW: Try with step regression / local regression ?
-
 
 # This time for RE consumption levels
 consump.renew.lm <- lm(consump.renew.p$`European Union - 27 countries (from 2020)` ~ consump.renew.p$year)
@@ -589,63 +589,147 @@ lines(year.grid, preds.lm.renew$fit, lwd =2, col =" blue")
 matlines(year.grid, se.bands, lwd =1, col =" blue", lty =3)
 # Seems to get much better results than for fossil fuels
 
-# REVIEW: Boot1d. strap - make inference about parameters ?
 
 
-# Nonparametric regression on fossils and oil+petroleum consumption
-
-# REVIEW: Try Step regression / local regression before GAM? 
-
-# FIXME: Try to make a gam model with renewables consumption as response variable and oil, fossil fuels and years
-# as covariates.
-
-# GAM
-consump.nonr <- cbind(consump.fossils.p$year,
-                      consump.fossils.p$`European Union - 27 countries (from 2020)`,
-                      consump.oil.petr.p$`European Union - 27 countries (from 2020)`)
-consump.nonr <- as.data.frame(consump.nonr)
-colnames(consump.nonr) <- c("year", "eu_fossils", "eu_oil_petr")
+# REVIEW: Try to make a conformal prediction with renewables consumption as response variable and oil, 
+# fossil fuels, gas and years as covariates.
 
 
-consump.nonr.gam <- gam(year ~ s(eu_fossils, bs="tp") + s(eu_oil_petr, bs="tp"),
-                           data = consump.nonr) 
-summary(consump.nonr.gam)
+vec_oil <- cbind(consump.oil.petr.countries[,1],rep(1990,35))
+vec_ff <- cbind(consump.fossils.countries[,1],rep(1990,35))
+vec_ng <- cbind(consump.gas.countries[,1],rep(1990,35))
+for (j in 2:30){
+    v <- cbind(consump.oil.petr.countries[,j], rep(1990+j-1, 35))
+    vec_oil <- rbind(vec_oil,v)
+    v <- cbind(consump.fossils.countries[,j], rep(1990+j-1, 35))
+    vec_ff <- rbind(vec_ff,v)
+    v <- cbind(consump.gas.countries[,j], rep(1990+j-1, 35))
+    vec_ng <- rbind(vec_ng,v)
+}
+vec_oil <- data.frame(vec_oil)
+colnames(vec_oil) <- c("value_oil","year")
+vec_ff <- data.frame(vec_ff)
+colnames(vec_ff) <- c("value_ff","year")
+vec_ng <- data.frame(vec_ng)
+colnames(vec_ng) <- c("value_ng","year")
 
-hist(consump.nonr.gam$residuals)
-qqnorm(consump.nonr.gam$residuals)
+# Predict levels of oil+petr, ff, gas 2020-2024 with ind. variable year
 
-shapiro.test(consump.nonr.gam$residuals)
-# Residuals normally distributed
+# With GAM:
+# a. Oil+Petr
+consump.oil.petr.gam <- gam(value_oil ~ s(year, bs="tp"),
+                           data = vec_oil) 
+summary(consump.oil.petr.gam)
 
-# With natural cubic splines smoothers
-consump.nonr.gam.ns <- lm(year ~ ns(eu_fossils, df=3) + ns(eu_oil_petr, df=3),
-                   data = consump.nonr)
+hist(consump.oil.petr.gam$residuals)
+qqnorm(consump.oil.petr.gam$residuals)
+shapiro.test(consump.oil.petr.gam$residuals)
 
-plot(consump.nonr.gam.ns$residuals, consump.nonr.gam$residuals)
-cor(consump.nonr.gam.ns$residuals, consump.nonr.gam$residuals) # Almost 1
-# We obtain the same model (almost) using natural cubic splines smoothers
+# b. Fossil fuels
+consump.fossils.gam <- gam(value_ff ~ s(year, bs="tp"),
+                           data = vec_ff) 
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
+
+# c. Natural Gas
+consump.gas.gam <- gam(value_ng ~ s(year, bs="tp"),
+                           data = vec_ng) 
+summary(consump.gas.gam)
+
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
 
 # Prediction with GAM model
+year.grid <- seq(range(vec_oil$year)[1], 2024, by=0.5)
 
-consump.fossils.grid <- seq(range(consump.nonr$eu_fossils)[1],
-                            range(consump.nonr$eu_fossils)[2] ,
-                            length.out = 100)
+consump.oil.petr.gam.preds <- predict(consump.oil.petr.gam, newdata=list(year=year.grid), se=T)
 
-consump.oil.petr.grid <- seq(range(consump.nonr$eu_oil_petr)[1],
-                            range(consump.nonr$eu_oil_petr)[2] ,
-                            length.out = 100)
+consump.fossils.gam.preds <- predict(consump.fossils.gam, newdata=list(year=year.grid), se=T)
+
+consump.gas.gam.preds <- predict(consump.gas.gam, newdata=list(year=year.grid), se=T)
+
+# Combine predictions into a single DF
+
+consump.nonr.preds <- cbind(year.grid, consump.oil.petr.gam.preds$fit,
+                            consump.fossils.gam.preds$fit, consump.gas.gam.preds$fit)
+consump.nonr.preds <- data.frame(consump.nonr.preds)
+colnames(consump.nonr.preds) <- c("year", "value_oil", "value_ff", "value_ng")
+
+# See graphs
+with(vec_oil, plot(year ,value_oil ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Terajoule" ,
+                   col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
+lines(year.grid, consump.oil.petr.gam.preds$fit ,lwd =2, col =" red")
+
+with(vec_ff, plot(year ,value_ff ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Terajoule" ,
+                   col =" darkgrey ",main='GAM Prediction - Fossil Fuels'))
+lines(year.grid, consump.fossils.gam.preds$fit ,lwd =2, col =" red")
+
+with(vec_ng, plot(year ,value_ng ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Terajoule" ,
+                   col =" darkgrey ",main='GAM Prediction - Natural Gas'))
+lines(year.grid, consump.gas.gam.preds$fit ,lwd =2, col =" red")
 
 
-consump.nonr.grid <- expand.grid(consump.fossils.grid,
-                                 consump.oil.petr.grid)
-names(consump.nonr.grid) <- c('eu_fossils','eu_oil_petr')
+# Conformal prediction (with GAM)
 
-consump.nonr.gam.pred <- predict(consump.nonr.gam,
-                                 newdata=consump.nonr.grid)
+# Join all energies for common DF
+vec_re <- cbind(consump.renew.countries[,1],rep(1990,35))
+for (j in 2:30){
+    v <- cbind(consump.renew.countries[,j], rep(1990+j-1, 35))
+    vec_re <- rbind(vec_re,v)
+}
+vec_ <- cbind(vec_re, vec_oil[,1], vec_ff[,1], vec_ng[,1])
+vec_ <- data.frame(vec_)
+colnames(vec_) <- c("value_re","year", "value_oil", "value_ff", "value_ng")
 
-# 3D representation of predictions
-persp3d(consump.fossils.grid, consump.oil.petr.grid, consump.nonr.gam.pred, col='grey30')
-with(consump.nonr,points3d(eu_fossils, eu_oil_petr, year,col='black',size=5))
+vec_re=data.frame(vec_re)
+colnames(vec_re)=c("value_re","year")
+
+
+model_gam <- gam(value_re ~ s(year,bs='cr') + s(value_oil,bs='cr') + 
+                  s(value_ff,bs='cr') + s(value_ng,bs='cr'), data=vec_)
+
+year.grid <- consump.nonr.preds$year
+oil.grid  <- consump.nonr.preds$value_oil
+ff.grid   <- consump.nonr.preds$value_ff
+ng.grid   <- consump.nonr.preds$value_ng
+
+grid <- expand.grid(year.grid,oil.grid,ff.grid, ng.grid)
+names(grid) <- c("year","value_oil","value_ff", "value_ng")
+# pred <- predict(model_gam, newdata=grid)
+
+
+train_gam=function(x,y,out=NULL){
+    colnames(x)=c("var1", "var2", "var3", "var4")
+    train_data=data.frame(y,x)
+    model_gam=gam(y ~ s(var1,bs='cr') + s(var2,bs='cr') + s(var3,bs='cr') + s(var4,bs='cr'),
+                  data=train_data)
+}
+
+
+predict_gam=function(obj, new_x){
+    new_x=data.frame(new_x)
+    colnames(new_x)=c("var1", "var2", "var3", "var4")
+    predict.gam(obj,new_x)
+}
+
+
+c_preds <- conformal.pred(cbind(vec_$year, vec_$value_oil, vec_$value_ff, vec_$value_ng), vec_$value_re,
+                          cbind(vec_$year, vec_$value_oil, vec_$value_ff, vec_$value_ng),
+                          alpha=0.05, verbose=T, train.fun = train_gam ,
+                          predict.fun = predict_gam, num.grid.pts = 200)
+c_preds
+
+
+with(vec_re, plot(year, value_re,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Terajoule",
+                  col =" darkgrey ",main='GAM conformal prediction - Renewable Energies'))
+
+lines(year.grid,c_preds$pred ,lwd =2, col ="green",lty=3)
+lines(year.grid,numeric(length(year.grid)),lwd=1,col="blue",lty=3)
+matlines(year.grid ,c_preds$up ,lwd =1, col =" blue",lty =3)
 
 
 
