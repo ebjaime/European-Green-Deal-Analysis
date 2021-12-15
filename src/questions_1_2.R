@@ -14,7 +14,7 @@ library(ggplot2)
 #library(DepthProc)
 #library(robustbase)
 
-B <- 100000 # REVIEW:
+B <- 100000
 seed <- 42
 
 # 1000 Tons Of Oil Equivalent to Terajoules = 41.1868
@@ -22,7 +22,7 @@ tto_2_tj <- function(tto) {
     return(tto * 41.868)
 }
 
-# REVIEW:
+
 # Load datasets
 # In energy balances we dont have the value Final Consumption (FC), but it can be estimated as sum of several
 # https://www.eea.europa.eu/data-and-maps/indicators/final-energy-consumption-by-sector-13
@@ -73,7 +73,7 @@ energy.balances.p <- preprocess(energy.balances.1, tj=F)
 
 consump.fossils.p <- preprocess(consump.fossils[,-32], tj=T) # wo 2020
 
-consump.fossils.p[-1,] <- consump.fossils.p[-1,] * 25 # FIXME:
+consump.fossils.p[-1,] <- consump.fossils.p[-1,] * 25 #  Calorific power of FF
                                  
 consump.oil.petr.p <- preprocess(consump.oil.petr[,-32], tj=F) # wo 2020
 consump.gas.p      <- preprocess(consump.gas[,-32], tj=T) # wo 2020
@@ -215,7 +215,7 @@ hist(p.values.re) # Shapiro-Wilk test might fail with small n values
 
 ##################################
 
-# 1a. Permutational Two population MV test - Comparing Consumption distributions 
+# Permutational Two population MV test - Comparing Consumption distributions 
 # We want to compare the distributions of NR vs R fuels for each country 
 consump.fossils.mean <- colMeans(consump.fossils.countries, na.rm=T)
 consump.oil.petr.mean <- colMeans(consump.oil.petr.countries, na.rm=T)
@@ -333,18 +333,26 @@ p_val
 
 
 # RE vs OP ----------------------------------------------------------------
-# REVIEW: Use year by year change of each energy (RE vs OP (or NG or FF))
+# Use year by year change of each energy (RE vs OP (or NG or FF))
 
 # Does the renew. consumption follow the same distribution as fossils or oil & petr. consumption?
 
-matplot(seq(year.max.2,year.min), consump.renew.mean,type="l")
+consump.oil.petr.diff <- consump.oil.petr.countries[,-1] - consump.oil.petr.countries[,-length(consump.oil.petr.countries)]
+consump.renew.diff <- consump.renew.countries[,-1] - consump.renew.countries[,-length(consump.renew.countries)]
 
-n1 <- dim(as.matrix(consump.renew.mean))[1]
-n2 <- dim(as.matrix(consump.oil.petr.mean))[1]
+consump.oil.petr.diff.mean <- colMeans(consump.oil.petr.diff, na.rm=T)
+consump.renew.diff.mean <- colMeans(consump.renew.diff, na.rm=T)
+
+matplot(seq(year.min+1,year.max), consump.renew.diff.mean,type="l")
+matplot(seq(year.min+1,year.max), consump.oil.petr.diff.mean,type="l")
+
+
+n1 <- dim(as.matrix(consump.renew.diff.mean))[1]
+n2 <- dim(as.matrix(consump.oil.petr.diff.mean))[1]
 n  <- n1 + n2
 
 # Test statistic
-T30 <- as.numeric((consump.renew.mean-consump.oil.petr.mean) %*% (consump.renew.mean-consump.oil.petr.mean))
+T30 <- as.numeric((consump.renew.diff.mean-consump.oil.petr.diff.mean) %*% (consump.renew.diff.mean-consump.oil.petr.diff.mean))
 T30
 
 # Permutational distribution
@@ -355,7 +363,7 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 
 for(perm in 1:B){
-    t_pooled <- cbind(consump.renew.countries,consump.oil.petr.countries)
+    t_pooled <- cbind(consump.renew.diff,consump.oil.petr.diff)
     permutation <- sample(n)
     t_perm <- t_pooled[,permutation]
     t1_perm <- t_perm[,1:n1]
@@ -371,7 +379,7 @@ for(perm in 1:B){
 }
 
 # Graphics for the permutational distribution
-hist(T3,xlim=range(c(T2,T20)))
+hist(T3,xlim=range(c(T3,T30)))
 abline(v=T30,col=3,lwd=4)
 
 plot(ecdf(T3))
@@ -384,7 +392,7 @@ p_val
 #################################
 
 
-# 1b. Two way permutational ANOVA - Oil & Petr. consumption + Renewables to represent Energy Balances 
+# Two way permutational ANOVA - Oil & Petr. consumption + Renewables to represent Energy Balances 
 
 # For each country we obtain a different ANOVA.
 aov_Belgium <- aov(energy.balances.countries$Belgium ~ consump.oil.petr.countries$Belgium +       #are these factors? Maybe a linear model should make more sense
@@ -438,7 +446,7 @@ p_val <- sum(T_oil_renew >= T0_oil_renew)/B
 p_val # Significant p-value
 
 
-# 1c. NP tests to analyze Geographical differences from prev data via
+# NP tests to analyze Geographical differences from prev data via
 # Two sample paired MV test - Comparing Countries for diff. consumptions
 
 # We can compare Italy's consumption of fossil fuels + renewables + petroleum
@@ -532,7 +540,7 @@ p_val
 # REVIEW: Could retry with Mahalannobis distance like lab 4
 
 
-# 1d. Regression to view the trend of energy consumption 
+# Regression to view the trend of energy consumption 
 
 # Lets first look at the trends of the three types of energies 
 
@@ -581,7 +589,7 @@ lines(year.grid, preds.lm.renew$fit, lwd =2, col =" blue")
 matlines(year.grid, se.bands, lwd =1, col =" blue", lty =3)
 # Seems to get much better results than for fossil fuels
 
-# REVIEW: Bootstrap - make inference about parameters ?
+# REVIEW: Boot1d. strap - make inference about parameters ?
 
 
 # Nonparametric regression on fossils and oil+petroleum consumption
