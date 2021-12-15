@@ -727,9 +727,9 @@ c_preds
 with(vec_re, plot(year, value_re,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Terajoule",
                   col =" darkgrey ",main='GAM conformal prediction - Renewable Energies'))
 
-lines(year.grid,c_preds$pred ,lwd =2, col ="green",lty=3)
-lines(year.grid,numeric(length(year.grid)),lwd=1,col="blue",lty=3)
-matlines(year.grid ,c_preds$up ,lwd =1, col =" blue",lty =3)
+lines(vec_$year,c_preds$pred ,lwd =2, col ="green",lty=3)
+lines(year.grid, numeric(length(year.grid)),lwd=1,col="blue",lty=3)
+matlines(vec_$year ,c_preds$up ,lwd =1, col =" blue",lty =3)
 
 
 
