@@ -118,7 +118,7 @@ consump.total.p
 p_italy <- ggplot(data=as.data.frame(t(energy.balances.p)), aes(x=year, y=Italy)) +
             labs(title="Energy Balances Progression - Italy", 
                  subtitle="Gross Available Energy") +
-            xlab("Year") + ylab("Thousand tonnes of oil equivalent") +
+            xlab("Year") + ylab("Terajoules") +
             geom_point() +
             geom_smooth(method="loess", formula=y~x, fill="blue", colour="darkblue", size=1)
 p_italy
@@ -127,7 +127,7 @@ p_italy
 p_sweden <- ggplot(data=as.data.frame(t(consump.fossils.p)), aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
             labs(title="Consumption Solid Fossil Fuels - Sweden", 
                  subtitle="Inland consumption") +
-            xlab("Year") + ylab("Thousand tonnes of oil equivalent") +
+            xlab("Year") + ylab("Terajoules") +
             geom_point() +
             geom_smooth(method="loess", formula=y~x, fill="red", colour="darkred", size=1)
 p_sweden
@@ -153,15 +153,15 @@ consump.renew.countries <- consump.renew.p[-c(1,2,3,4),]
 # Consumption plots by country -------------------------------------------------------------------
 
 matplot(seq(year.min, year.max), t(energy.balances.countries), type="l", lty=1,
-        main="Energy Balances EU 1990 - 2019", xlab="Year", ylab="Thousand tonnes of oil equivalent")
+        main="Energy Balances EU 1990 - 2019", xlab="Year", ylab="Terajoules")
 
 matplot(seq(year.min, year.max), t(consump.fossils.countries), type="l", lty=1,
         main="Consumption of solid fossil fuels EU 1990 - 2019", xlab="Year",
-        ylab="Thousand tonnes (solid fossil fuels)")
+        ylab="Terajoules")
 
 matplot(seq(year.min, year.max), t(consump.oil.petr.countries), type="l", lty=1,
         main="Consumption of Oil and Petroleum EU 1990 - 2019", xlab="Year",
-        ylab="Thousand tonnes (oil and petroleum products)")
+        ylab="Terajoules")
 
 matplot(seq(year.min, year.max), t(consump.gas.countries), type="l", lty=1,
         main="Consumption of Natural Gas EU 1990 - 2019", xlab="Year",
@@ -230,9 +230,10 @@ matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
                                        consump.oil.petr.mean,
                                        consump.gas.mean,
                                        consump.renew.mean)),
-        type="l",main="Consumption means for each type of fuel")
+        type="l",main="Consumption means for each type of fuel",xlab="Years",ylab="Terajoules",
+        ylim=c(0,range(consump.fossils.mean)[2]+300000))
 
-legend("topright", legend =c("FF","OP","NG","RE"), col=1:4, pch=2)
+legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas","Renewable Energies"), col=1:4, pch=2)
 
 
 # Renewable consumption and Fossil Fuels are very different from oil & petr. and natural gas consumption
@@ -341,22 +342,34 @@ p_val
 
 # Does the renew. consumption follow the same distribution as fossils or oil & petr. consumption?
 
-consump.oil.petr.diff <- consump.oil.petr.countries[,-1] - consump.oil.petr.countries[,-length(consump.oil.petr.countries)]
+mean.consump.nonrenew = ( consump.fossils.countries[,]+consump.gas.countries[,]+consump.oil.petr.countries[,] )/3
+mean.consump.nonrenew.mean=colMeans(mean.consump.nonrenew)
+
+matplot(seq(year.min, year.max), t(rbind(mean.consump.nonrenew.mean,
+                                         consump.renew.mean)),
+        type="l",main="Consumption means renewables vs non-renewables",xlab="Years",ylab="Terajoules",
+        ylim=c(0,range(mean.consump.nonrenew.mean)[2]+300000),col=c(1,3),lty=c(1,1))
+legend("topright",legend=c("Non-renewable sources","Renewable sources"),col=c(1,3),pch=2)
+
+
+mean.consump.nonrenew.diff <- mean.consump.nonrenew[,-length(mean.consump.nonrenew)] - mean.consump.nonrenew[,-1] #"inverse" deltas to obtain growing curve differences
 consump.renew.diff <- consump.renew.countries[,-1] - consump.renew.countries[,-length(consump.renew.countries)]
 
-consump.oil.petr.diff.mean <- colMeans(consump.oil.petr.diff, na.rm=T)
+mean.consump.nonrenew.diff.mean <- colMeans(mean.consump.nonrenew.diff, na.rm=T)
 consump.renew.diff.mean <- colMeans(consump.renew.diff, na.rm=T)
 
-matplot(seq(year.min+1,year.max), consump.renew.diff.mean,type="l")
-matplot(seq(year.min+1,year.max), consump.oil.petr.diff.mean,type="l")
+matplot(seq(year.min+1,year.max), consump.renew.diff.mean,type="l",ylab="Terajoules",xlab="Years",
+        main="Renewable consumptions year to year average deltas",col="green")
+matlines(seq(year.min+1,year.max), mean.consump.nonrenew.diff.mean,type="l",ylab="Terajoules",xlab="Years",
+        main="Mean non-renewable consumptions year to year inverse average deltas")
 
 
-n1 <- dim(as.matrix(consump.renew.diff.mean))[1]
-n2 <- dim(as.matrix(consump.oil.petr.diff.mean))[1]
+n1 <- dim(as.matrix(consump.renew.diff))[1]
+n2 <- dim(as.matrix(mean.consump.nonrenew.diff))[1]
 n  <- n1 + n2
 
 # Test statistic
-T30 <- as.numeric((consump.renew.diff.mean-consump.oil.petr.diff.mean) %*% (consump.renew.diff.mean-consump.oil.petr.diff.mean))
+T30 <- as.numeric((consump.renew.diff.mean-mean.consump.nonrenew.diff.mean) %*% (consump.renew.diff.mean-mean.consump.nonrenew.diff.mean))
 T30
 
 # Permutational distribution
@@ -367,15 +380,15 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 
 for(perm in 1:B){
-    t_pooled <- cbind(consump.renew.diff,consump.oil.petr.diff)
+    t_pooled <- cbind(consump.renew.diff,mean.consump.nonrenew.diff)
     permutation <- sample(n)
-    t_perm <- t_pooled[,permutation]
-    t1_perm <- t_perm[,1:n1]
-    t2_perm <- t_perm[,(n1+1):n]
+    t_perm <- t_pooled[permutation,]
+    t1_perm <- t_perm[1:n1,]
+    t2_perm <- t_perm[(n1+1):n,]
     
     # Evaluation of the test statistic on permuted data
-    t1.mean_perm <- rowMeans(t1_perm, na.rm = T)
-    t2.mean_perm <- rowMeans(t2_perm, na.rm = T)
+    t1.mean_perm <- colMeans(t1_perm, na.rm = T)
+    t2.mean_perm <- colMeans(t2_perm, na.rm = T)
     T3[perm]  <- (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
     
     pb$tick()
@@ -383,10 +396,10 @@ for(perm in 1:B){
 }
 
 # Graphics for the permutational distribution
-hist(T3,xlim=range(c(T3,T30)))
+hist(T3,xlim=range(c(T3,T30)),main="Squared L2 norm of means difference - permutational distribution")
 abline(v=T30,col=3,lwd=4)
 
-plot(ecdf(T3))
+plot(ecdf(T3),main="Squared L2 norm of means difference - permutational ecdf")
 abline(v=T30,col=3,lwd=4)
 
 # Calculate p-value
