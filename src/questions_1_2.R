@@ -718,7 +718,7 @@ predict_gam=function(obj, new_x){
 
 
 c_preds <- conformal.pred(cbind(vec_$year, vec_$value_oil, vec_$value_ff, vec_$value_ng), vec_$value_re,
-                          cbind(vec_$year, vec_$value_oil, vec_$value_ff, vec_$value_ng),
+                          cbind(consump.nonr.preds$year, consump.nonr.preds$value_oil, consump.nonr.preds$value_ff, vec_$value_ng),
                           alpha=0.05, verbose=T, train.fun = train_gam ,
                           predict.fun = predict_gam, num.grid.pts = 200)
 c_preds
