@@ -697,7 +697,7 @@ for (j in 2:30){
 vec_ <- cbind(vec_re, vec_oil[,1], vec_ff[,1], vec_ng[,1])
 vec_ <- data.frame(vec_)
 colnames(vec_) <- c("value_re","year", "value_oil", "value_ff", "value_ng")
-
+# Also create DF for Renewable energies
 vec_re=data.frame(vec_re)
 colnames(vec_re)=c("value_re","year")
 
@@ -730,19 +730,18 @@ predict_gam=function(obj, new_x){
 }
 
 
-c_preds <- conformal.pred(cbind(vec_$year, vec_$value_oil, vec_$value_ff, vec_$value_ng), vec_$value_re,
-                          cbind(consump.nonr.preds$year, consump.nonr.preds$value_oil, consump.nonr.preds$value_ff, vec_$value_ng),
-                          alpha=0.05, verbose=T, train.fun = train_gam ,
-                          predict.fun = predict_gam, num.grid.pts = 200)
-c_preds
-
+c_preds <- conformal.pred.split(cbind(vec_$year, vec_$value_oil, vec_$value_ff, vec_$value_ng), 
+                                vec_$value_re,
+                                cbind(consump.nonr.preds$year, consump.nonr.preds$value_oil, consump.nonr.preds$value_ff, consump.nonr.preds$value_ng),
+                                alpha=0.05, verbose=T, train.fun = train_gam,
+                                predict.fun = predict_gam)
 
 with(vec_re, plot(year, value_re,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Terajoule",
                   col =" darkgrey ",main='GAM conformal prediction - Renewable Energies'))
 
-lines(vec_$year,c_preds$pred ,lwd =2, col ="green",lty=3)
+lines(consump.nonr.preds$year,c_preds$pred ,lwd =2, col ="green",lty=3)
 lines(year.grid, numeric(length(year.grid)),lwd=1,col="blue",lty=3)
-matlines(vec_$year ,c_preds$up ,lwd =1, col =" blue",lty =3)
+matlines(consump.nonr.preds$year ,c_preds$up ,lwd =1, col =" blue",lty =3)
 
 
 
