@@ -14,86 +14,104 @@ library(ggplot2)
 #library(DepthProc)
 #library(robustbase)
 
-B <- 100000
+B <- 100000 # REVIEW:
 seed <- 42
 
+# 1000 Tons Of Oil Equivalent to Terajoules = 41.1868
+tto_2_tj <- function(tto) {
+    return(tto * 41.868)
+}
 
+# REVIEW:
 # Load datasets
-# REVIEW: QuÃ© hoja de cada xlsx??
-energy.balances <- read.xlsx("data/complete_energy_balances.xlsx",sheet=1) #first sheet should be the best,
-                                                            # even if in the presentation we chose the fourth
-consump.fossils <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx",sheet=1) #first sheet
-consump.oil.petr <- read.xlsx("data/consumption_oil_petroleum.xlsx",sheet=1) #first sheet
-consump.renew.1 <- read.xlsx("data/consumption_renewables.xlsx",sheet=1)
-consump.renew.2 <- read.xlsx("data/consumption_renewables.xlsx",sheet=2)
-consump.renew.3 <- read.xlsx("data/consumption_renewables.xlsx",sheet=3)
-consump.renew.4 <- read.xlsx("data/consumption_renewables.xlsx",sheet=4)
-consump.renew.5 <- read.xlsx("data/consumption_renewables.xlsx",sheet=5) #sum all sheets
-percent.renew <- read.xlsx("data/percentage_renewables.xlsx")
+# In energy balances we dont have the value Final Consumption (FC), but it can be estimated as sum of several
+# https://www.eea.europa.eu/data-and-maps/indicators/final-energy-consumption-by-sector-13
+energy.balances.1  <- read.xlsx("data/complete_energy_balances.xlsx",sheet=1) # Gross available energy, first sheet should be the best, even if in the presentation we chose the fourth
+
+consump.fossils  <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx",sheet=1) # Inland consumption
+consump.gas      <- read.xlsx("data/consumption_gas.xlsx",sheet=1) # Inland consumption
+consump.oil.petr <- read.xlsx("data/consumption_oil_petroleum.xlsx",sheet=1) # Inland consumption
+
+consump.renew.1  <- read.xlsx("data/consumption_renewables.xlsx",sheet=1) # Geothermal, inland consump
+consump.renew.2  <- read.xlsx("data/consumption_renewables.xlsx",sheet=2) # Solar thermal, inland consump.
+consump.renew.3  <- read.xlsx("data/consumption_renewables.xlsx",sheet=3) # Biofuels, inland consump.
+consump.renew.4  <- read.xlsx("data/consumption_renewables.xlsx",sheet=4) # Biogases, inland consump.
+consump.renew.5  <- read.xlsx("data/consumption_renewables.xlsx",sheet=5) # Renewable waste, inland consump.
+
+percent.renew <- read.xlsx("data/percentage_renewables.xlsx") 
+
 prod.by.fuel <- read.xlsx("data/production_capacities_by_fuel.xlsx")
 
 
 # Function cleans df removing NAN rows, setting values as numeric...
-preprocess <- function(df, rm_nrows=6, end_nrows=2) { #end_nrows is the number of rows at the end to quit
+preprocess <- function(df, start_nrows=6, end_nrows=2, tj=T) { 
     
     # Remove first rows not containing significant data
-    df <- df[-c(1:rm_nrows,(dim(df)[1]-(end_nrows-1)):dim(df)[1]),]
+    df <- df[-c(1:start_nrows,(dim(df)[1]-(end_nrows-1)):dim(df)[1]),]
     
-    # colnames(energy.balances) <- energy.balances[1,]
-    # energy.balances <- energy.balances[-1,]
     rownames(df) <- df[,1]
     df <- df[,-1]
     
     rownames(df)[1] <- "year"
     
     # Remove rows with NA values 
-    #df <- na.omit(df)
-    df=df[!df[,1]==':',]
+    df <- df[!df[,1]==':',]
     
     
-    # REVIEW: Change cells to numeric. How many decimals??
-    df[] <- lapply(df, as.numeric)
+    # 3 decimals
+    df[] <- lapply(df, as.numeric)  
     
-    # Transpose to get years as columns
-    #df.t <- as.data.frame(t(df))       #why transpose?
+    if(!tj) # All data should be converted to Terajoules
+        df[-1,] <- lapply(df[-1,], tto_2_tj)
+    
     return(df)
 }
 
 
 
-energy.balances.p <- preprocess(energy.balances)
-consump.fossils.p <- preprocess(consump.fossils[,-32]) #no 2020
-consump.oil.petr.p <- preprocess(consump.oil.petr[-32]) #no 2020
+energy.balances.p <- preprocess(energy.balances.1, tj=F)
+
+consump.fossils.p <- preprocess(consump.fossils[,-32], tj=T) # wo 2020
+
+consump.fossils.p[-1,] <- consump.fossils.p[-1,] * 25 # FIXME:
+                                 
+consump.oil.petr.p <- preprocess(consump.oil.petr[,-32], tj=F) # wo 2020
+consump.gas.p      <- preprocess(consump.gas[,-32], tj=T) # wo 2020
 
 
-consump.renew.1.p   <- preprocess(consump.renew.1)
-consump.renew.2.p <- preprocess(consump.renew.2)
-consump.renew.3.p <- preprocess(consump.renew.3)
-consump.renew.4.p <- preprocess(consump.renew.4)
-consump.renew.5.p <- preprocess(consump.renew.5)
+consump.renew.1.p <- preprocess(consump.renew.1[,-32])
+consump.renew.2.p <- preprocess(consump.renew.2[,-32])
+consump.renew.3.p <- preprocess(consump.renew.3[,-32])
+consump.renew.4.p <- preprocess(consump.renew.4[,-32])
+consump.renew.5.p <- preprocess(consump.renew.5[,-32])
 
-consump.renew.p=consump.renew.1.p
-for (j in 2:39){
-    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.2.p[,j]
-}
-
-for (j in 2:39){
-    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.3.p[,j]
-}
-for (j in 2:39){
-    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.4.p[,j]
-}
-for (j in 2:39){
-    consump.renew.p[,j]=consump.renew.p[,j]+consump.renew.5.p[,j]
-}
+consump.renew.p <- consump.renew.1.p # Sum of all renewable energies
+consump.renew.p[-1,] <- consump.renew.p[-1,] + consump.renew.2.p[-1,] + consump.renew.3.p[-1,] +
+    consump.renew.4.p[-1,] + consump.renew.5.p[-1,]
 
 
-consump.renew.p=consump.renew.p[-31,]
-View(consump.renew.p)
 
-# Visualize data examples
+# Check sum of all consumptions -------------------------------------------
+
+energy.balances.p[2,1]
+
+# derived.heat <- 2446635 
+# electricity  <- 1987708.001 * 18/5 # Gigawatt-hour to TJ
+consump.total.p <- 
+                    consump.renew.p[2,1] +
+                    consump.oil.petr.p[2,1] +
+                    consump.fossils.p[2,1] +
+                    consump.gas.p[2,1]
+                    # derived.heat +
+                    # electricity 
+consump.total.p
+
+#######################
+
+# Country plot examples ---------------------------------------------------
+
 # Example of energy balances
-p_italy <- ggplot(data=energy.balances.p, aes(x=year, y=Italy)) +
+p_italy <- ggplot(data=as.data.frame(t(energy.balances.p)), aes(x=year, y=Italy)) +
             labs(title="Energy Balances Progression - Italy", 
                  subtitle="Gross Available Energy") +
             xlab("Year") + ylab("Thousand tonnes of oil equivalent") +
@@ -102,7 +120,7 @@ p_italy <- ggplot(data=energy.balances.p, aes(x=year, y=Italy)) +
 p_italy
 
 # Example of consumption of solid fossil fuels
-p_sweden <- ggplot(data=consump.fossils.p, aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
+p_sweden <- ggplot(data=as.data.frame(t(consump.fossils.p)), aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
             labs(title="Consumption Solid Fossil Fuels - Sweden", 
                  subtitle="Inland consumption") +
             xlab("Year") + ylab("Thousand tonnes of oil equivalent") +
@@ -110,6 +128,7 @@ p_sweden <- ggplot(data=consump.fossils.p, aes(x=year, y=Sweden)) + #plot of ene
             geom_smooth(method="loess", formula=y~x, fill="red", colour="darkred", size=1)
 p_sweden
 
+#######################
 
 #######################
 # 1.
@@ -117,81 +136,116 @@ p_sweden
 # How are the renewable energies levels of consumptions growing? 
 # And the non renewables ones?
 
+year.min <- min(energy.balances.p[1,])
+year.max <- max(energy.balances.p[1,])
+countries.list <- rownames(consump.fossils.p[-c(1,2,3,4),]) 
 
-year.min <- min(energy.balances.p$year)
-year.max.1 <- max(energy.balances.p$year)
-year.max.2 <- max(consump.fossils.p$year)
-countries.list <- colnames(consump.fossils.p[,-c(1,2,3,4)]) 
+energy.balances.countries <- energy.balances.p[-c(1,2,3,4),]
+consump.fossils.countries <-consump.fossils.p[-c(1,2,3,4),]
+consump.oil.petr.countries <- consump.oil.petr.p[-c(1,2,3,4),]
+consump.gas.countries <- consump.gas.p[-c(1,2,3,4),]
+consump.renew.countries <- consump.renew.p[-c(1,2,3,4),]
 
-energy.balances.countries <- energy.balances.p[,-c(1,2,3,4)]
-consump.fossils.countries <-consump.fossils.p[,-c(1,2,3,4)]
-consump.oil.petr.countries <- consump.oil.petr.p[,-c(1,2,3,4)]
-consump.renew.countries <- consump.renew.p[,-c(1,2,3,4)]
+# Consumption plots by country -------------------------------------------------------------------
 
-# Graphics
-
-matplot(seq(year.min, year.max.1), energy.balances.countries, type="l", lty=1,
+matplot(seq(year.min, year.max), t(energy.balances.countries), type="l", lty=1,
         main="Energy Balances EU 1990 - 2019", xlab="Year", ylab="Thousand tonnes of oil equivalent")
 
-matplot(seq(year.min, year.max.2), consump.fossils.countries, type="l", lty=1,
+matplot(seq(year.min, year.max), t(consump.fossils.countries), type="l", lty=1,
         main="Consumption of solid fossil fuels EU 1990 - 2019", xlab="Year",
         ylab="Thousand tonnes (solid fossil fuels)")
 
-matplot(seq(year.min, year.max.2), consump.oil.petr.countries, type="l", lty=1,
+matplot(seq(year.min, year.max), t(consump.oil.petr.countries), type="l", lty=1,
         main="Consumption of Oil and Petroleum EU 1990 - 2019", xlab="Year",
         ylab="Thousand tonnes (oil and petroleum products)")
 
-matplot(seq(year.min, year.max.2), consump.oil.petr.countries, type="l", lty=1,
-        main="Consumption of Oil and Petroleum EU 1990 - 2019", xlab="Year",
+matplot(seq(year.min, year.max), t(consump.gas.countries), type="l", lty=1,
+        main="Consumption of Natural Gas EU 1990 - 2019", xlab="Year",
+        ylab="Terajoules")
+
+matplot(seq(year.min, year.max), t(consump.renew.countries), type="l", lty=1,
+        main="Consumption of RE EU 1990 - 2019", xlab="Year",
         ylab="Terajoules")
 
 boxplot(energy.balances.countries, main="Boxplot Energy Balances", xlab="Countries", 
-        ylab="Thousand tonnes of oil equivalent")
+        ylab="Terajoules")
 
 boxplot(consump.fossils.countries, main="Boxplot of Consumption of Solid Fossil Fuels", xlab="Countries", 
-        ylab="Thousand tonnes (solid fossil fuels)")
+        ylab="Terajoule")
 
 boxplot(consump.oil.petr.countries, main="Boxplot of Consumption of Oil and Petroleum", xlab="Countries", 
-        ylab="Thousand tonnes (oil and petroleum products)")
+        ylab="Terajoule")
+
+boxplot(consump.gas.countries, main="Boxplot of Consumption of Natural Gas", xlab="Countries", 
+        ylab="Terajoule")
 
 boxplot(consump.renew.countries, main="Consumption of Renewables", xlab="Countries", 
         ylab="Terajoule")
 
+#######################
+
 # NP tests to compare year by year renewable vs non  renewable energy usage 
 
 # First, lets check for Normality 
-hist(consump.fossils.countries$Italy)
-hist(consump.oil.petr.countries$Italy)
-hist(consump.renew.countries$Italy)
+# Shapiro Wilk test on Consumption ----------------------------------------
 
-# REVIEW: Shapiro-Wilk test might fail to reject with small n
-p.values <- numeric(length(countries.list))
+index.italy <- which(rownames(consump.renew.countries) == c("Italy"))
+hist(t(consump.fossils.countries)[,index.italy])
+hist(t(consump.oil.petr.countries)[,index.italy])
+hist(t(consump.gas.countries)[,index.italy])
+hist(t(consump.renew.countries)[,index.italy])
+
+p.values.ff <- numeric(length(countries.list)) # Fossil fuels
+p.values.op <- numeric(length(countries.list)) # Oil&Petr.
+p.values.ng <- numeric(length(countries.list)) # Natural gas 
+p.values.re <- numeric(length(countries.list)) # RE
 for(c in 1:length(countries.list)){
-    p.values[c] <- shapiro.test(na.omit(consump.fossils.countries[,c]))$p.value
+    p.values.ff[c] <- shapiro.test(t(consump.fossils.countries)[,c])$p.value
+    p.values.op[c] <- shapiro.test(t(consump.oil.petr.countries)[,c])$p.value
+    p.values.ng[c] <- shapiro.test(t(consump.gas.countries)[,c])$p.value # Ignore errors
+    p.values.re[c] <- shapiro.test(t(consump.renew.countries)[,c])$p.value
+
+
+    
 }
-hist(p.values)
+hist(p.values.ff) # Shapiro-Wilk test might fail with small n values
+hist(p.values.op) # Shapiro-Wilk test might fail with small n values
+hist(p.values.ng) # Shapiro-Wilk test might fail with small n values
+hist(p.values.re) # Shapiro-Wilk test might fail with small n values
+
+##################################
 
 # 1a. Permutational Two population MV test - Comparing Consumption distributions 
 # We want to compare the distributions of NR vs R fuels for each country 
-consump.fossils.mean <- rowMeans(consump.fossils.countries, na.rm=T)
-consump.oil.petr.mean <- rowMeans(consump.oil.petr.countries, na.rm=T)
-consump.renew.mean <- rowMeans(consump.renew.countries, na.rm=T)
+consump.fossils.mean <- colMeans(consump.fossils.countries, na.rm=T)
+consump.oil.petr.mean <- colMeans(consump.oil.petr.countries, na.rm=T)
+consump.gas.mean <- colMeans(consump.gas.countries, na.rm=T)
+consump.renew.mean <- colMeans(consump.renew.countries, na.rm=T)
 
-matplot(seq(year.min, year.max.2), consump.fossils.mean, type="l",main="Consumption fossil fuels mean")
-matplot(seq(year.min, year.max.2), consump.oil.petr.mean, type="l",main="Consumption oil and petroleum mean")
-matplot(seq(year.min, year.max.2), consump.renew.mean, type="l",main="Consumption renewables mean")
+matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
+                                       consump.oil.petr.mean,
+                                       consump.gas.mean,
+                                       consump.renew.mean)),
+        type="l",main="Consumption means for each type of fuel")
 
-# Renewable consumption is very different from oil & petr. and fossil fuels consumption
+legend("topright", legend =c("FF","OP","NG","RE"), col=1:4, pch=2)
+
+
+# Renewable consumption and Fossil Fuels are very different from oil & petr. and natural gas consumption
 # But do these last two follow the same distribution?
 
 # H0: Distributions are equal
 # H1: Distributions are not equal
-n1 <- dim(as.matrix(consump.fossils.mean))[1]
+
+
+# NG vs OP ----------------------------------------------------------------
+
+n1 <- dim(as.matrix(consump.gas.mean))[1]
 n2 <- dim(as.matrix(consump.oil.petr.mean))[1]
 n  <- n1 + n2
 
 # Test statistic
-T10 <- as.numeric((consump.fossils.mean-consump.oil.petr.mean) %*% (consump.fossils.mean-consump.oil.petr.mean))
+T10 <- as.numeric((consump.gas.mean-consump.oil.petr.mean) %*% (consump.gas.mean-consump.oil.petr.mean))
 T10
 
 # Permutational distribution
@@ -202,15 +256,15 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 
 for(perm in 1:B){
-    t_pooled = cbind(consump.fossils.countries,consump.oil.petr.countries)
+    t_pooled = rbind(consump.gas.countries, consump.oil.petr.countries)
     permutation = sample(n)
-    t_perm = t_pooled[,permutation]
-    t1_perm = t_perm[,1:n1]
-    t2_perm = t_perm[,(n1+1):n]
+    t_perm = t_pooled[permutation,]
+    t1_perm = t_perm[1:n1,]
+    t2_perm = t_perm[(n1+1):n,]
     
     # Evaluation of the test statistic on permuted data
-    t1.mean_perm = rowMeans(t1_perm, na.rm = T)
-    t2.mean_perm = rowMeans(t2_perm, na.rm = T)
+    t1.mean_perm = colMeans(t1_perm, na.rm = T)
+    t2.mean_perm = colMeans(t2_perm, na.rm = T)
     T1[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
     
     pb$tick()
@@ -228,24 +282,17 @@ abline(v=T10,col=3,lwd=4)
 p_val <- sum(T1>=T10)/B
 p_val
 
-# Does the inverse renew. consumption follow the same distribution as fossils or oil & petr. consumption?
-# (supposing distribution of consump. of oil & petr = distribution of consump. fossils)
-
-#matplot(seq(year.min, year.max.2), -consump.renew.mean,type="l")
-matplot(seq(year.max.2,year.min), consump.renew.mean,type="l") #consumicion inversa
-
-consump.renew.countries.neg <- -consump.renew.countries
-consump.renew.mean.neg <- -consump.renew.mean
+#############################
 
 
-# H0: Distributions are equal
-# H1: Distributions are not equal
-n1 <- dim(as.matrix(consump.renew.mean.neg))[1]
+# FF vs OP ----------------------------------------------------------------
+
+n1 <- dim(as.matrix(consump.fossils.mean))[1]
 n2 <- dim(as.matrix(consump.oil.petr.mean))[1]
 n  <- n1 + n2
 
 # Test statistic
-T20 <- as.numeric((consump.renew.mean.neg-consump.oil.petr.mean) %*% (consump.renew.mean.neg-consump.oil.petr.mean))
+T20 <- as.numeric((consump.fossils.mean-consump.oil.petr.mean) %*% (consump.fossils.mean-consump.oil.petr.mean))
 T20
 
 # Permutational distribution
@@ -256,16 +303,16 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 
 for(perm in 1:B){
-    t_pooled <- cbind(consump.renew.countries.neg,consump.oil.petr.countries)
-    permutation <- sample(n)
-    t_perm <- t_pooled[,permutation]
-    t1_perm <- t_perm[,1:n1]
-    t2_perm <- t_perm[,(n1+1):n]
+    t_pooled = rbind(consump.fossils.countries, consump.oil.petr.countries)
+    permutation = sample(n)
+    t_perm = t_pooled[permutation,]
+    t1_perm = t_perm[1:n1,]
+    t2_perm = t_perm[(n1+1):n,]
     
     # Evaluation of the test statistic on permuted data
-    t1.mean_perm <- rowMeans(t1_perm, na.rm = T)
-    t2.mean_perm <- rowMeans(t2_perm, na.rm = T)
-    T2[perm]  <- (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+    t1.mean_perm = colMeans(t1_perm, na.rm = T)
+    t2.mean_perm = colMeans(t2_perm, na.rm = T)
+    T2[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
     
     pb$tick()
     
@@ -281,6 +328,60 @@ abline(v=T20,col=3,lwd=4)
 # Calculate p-value
 p_val <- sum(T2>=T20)/B
 p_val
+
+#############################
+
+
+# RE vs OP ----------------------------------------------------------------
+# REVIEW: Use year by year change of each energy (RE vs OP (or NG or FF))
+
+# Does the renew. consumption follow the same distribution as fossils or oil & petr. consumption?
+
+matplot(seq(year.max.2,year.min), consump.renew.mean,type="l")
+
+n1 <- dim(as.matrix(consump.renew.mean))[1]
+n2 <- dim(as.matrix(consump.oil.petr.mean))[1]
+n  <- n1 + n2
+
+# Test statistic
+T30 <- as.numeric((consump.renew.mean-consump.oil.petr.mean) %*% (consump.renew.mean-consump.oil.petr.mean))
+T30
+
+# Permutational distribution
+T3 <- numeric(B)
+set.seed(seed)
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+
+for(perm in 1:B){
+    t_pooled <- cbind(consump.renew.countries,consump.oil.petr.countries)
+    permutation <- sample(n)
+    t_perm <- t_pooled[,permutation]
+    t1_perm <- t_perm[,1:n1]
+    t2_perm <- t_perm[,(n1+1):n]
+    
+    # Evaluation of the test statistic on permuted data
+    t1.mean_perm <- rowMeans(t1_perm, na.rm = T)
+    t2.mean_perm <- rowMeans(t2_perm, na.rm = T)
+    T3[perm]  <- (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+    
+    pb$tick()
+    
+}
+
+# Graphics for the permutational distribution
+hist(T3,xlim=range(c(T2,T20)))
+abline(v=T30,col=3,lwd=4)
+
+plot(ecdf(T3))
+abline(v=T30,col=3,lwd=4)
+
+# Calculate p-value
+p_val <- sum(T3>=T30)/B
+p_val
+
+#################################
 
 
 # 1b. Two way permutational ANOVA - Oil & Petr. consumption + Renewables to represent Energy Balances 
@@ -487,7 +588,7 @@ matlines(year.grid, se.bands, lwd =1, col =" blue", lty =3)
 
 # REVIEW: Try Step regression / local regression before GAM? 
 
-# REVIEW: Try to make a gam model with renewables consumption as response variable and oil, fossil fuels and years
+# FIXME: Try to make a gam model with renewables consumption as response variable and oil, fossil fuels and years
 # as covariates.
 
 # GAM
@@ -541,7 +642,7 @@ with(consump.nonr,points3d(eu_fossils, eu_oil_petr, year,col='black',size=5))
 
 
 #######################
-# 2.  Estamos trabajando aquì
+# 2.  Estamos trabajando aqu?
 #######################
 # Which countries are more projected to switch to renewable energy?
 
