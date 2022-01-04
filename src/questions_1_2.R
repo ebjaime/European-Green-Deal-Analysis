@@ -571,7 +571,7 @@ matplot(seq(year.min, year.max.2), consump.renew.p$`European Union - 27 countrie
 
 # Lets try to fit a linear model for the Fossil energy consumption and the Renew. Energiy consumption
 
-year.grid <- seq(year.min, year.max.2)
+year.grid <- seq(year.min, year.max)
 
 # First with fossil fuels
 consump.fossils.lm=lm(consump.fossils.p$`European Union - 27 countries (from 2020)` ~ consump.fossils.p$year)
@@ -746,19 +746,10 @@ matlines(consump.nonr.preds$year ,c_preds$up ,lwd =1, col =" blue",lty =3)
 
 
 #######################
-# 2.  Estamos trabajando aqu?
+# 2. 
 #######################
 # Which countries are more projected to switch to renewable energy?
 
-# TODO: Nonparametric regression  on the solid fossil fuels and petroleum products 
-# imports datasets to investigate the renewable transition  of each country.
-
-
-
-# TODO: Analyze, for each country,  the percentage of energy produced
-# by renewable sources over the total energy  produced
-
-# dividir en regiones y luego tomar la region mejor y comparar los paises de esa region
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
 east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
@@ -767,13 +758,72 @@ south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","S
 
 central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
 
-percent.renew.p <- preprocess(percent.renew,5) #use it to clean useless row
-View(percent.renew.p)
-colnames(percent.renew.p)=seq(2004,2019)
-percent.renew.p=percent.renew.p[-1,]
 
-sigle=c("Eu 27","Eu 28","Ea 19","BE","BG","CZ","DK","DE","EE","IE","GR","ES","FR","HR","IT","CY","LV","LT","LU",
-        "HU","MT","NL","AT","PL","PT","RO","SI","SK","FI","SE","IS","NO","UK","MK","AL","RS","BA","XZ","MD")
-rownames(percent.renew.p)=sigle
-boxplot(t(percent.renew.p[4:39,]),main="Boxplot renewable energy percentage",ylab="Percentage",xlab="Country")
+# TODO: Check independence between countries or bw energy sources
+
+library(roahd)
+
+year.grid <- seq(year.min, year.max)
+
+# Bw countries
+countries.mfdata <- vector("list", length(countries.list)) 
+for(i in 1:length(countries.mfdata)){
+    c.fdata <- rbind(consump.renew.countries[i,],
+                           consump.fossils.countries[i,],
+                           consump.oil.petr.countries[i,],
+                           consump.gas.countries[i,])
+    
+    c.fdata <- fData(year.grid, c.fdata)
+    countries.mfdata[[i]] <- c.fdata
+}
+
+countries.mfdata <- as.mfData(countries.mfdata)
+
+# Calculate Spearman Matrix and Plot
+countries.SM <- cor_spearman(countries.mfdata, ordering='MHI')
+
+# Plot
+library(corrplot)
+corrplot(countries.SM,
+         title = "Spearman Matrix")
+
+
+# Bw energies 
+energies.mfdata <- as.mfData(list(fData(year.grid,consump.renew.countries),
+                                  fData(year.grid,consump.oil.petr.countries),
+                                  fData(year.grid,consump.gas.countries),
+                                  fData(year.grid,consump.fossils.countries)))
+
+# Calculate Spearman Matrix and Plot
+energies.SM <- cor_spearman(energies.mfdata, ordering='MHI')
+
+# Plot
+corrplot(energies.SM,
+         title = "Spearman Matrix")
+
+
+# Differences bw Countries
+
+year.grid <- seq(year.min, year.max)
+
+# Bw countries
+countries.diff.mfdata <- vector("list", length(countries.list)) 
+for(i in 1:length(countries.diff.mfdata)){
+    c.fdata <- rbind(consump.renew.countries[i,-1] - consump.renew.countries[i,-length(year.grid)],
+                     consump.fossils.countries[i,-1] - consump.fossils.countries[i,-length(year.grid)],
+                     consump.oil.petr.countries[i,-1] - consump.oil.petr.countries[i,-length(year.grid)],
+                     consump.gas.countries[i,-1] - consump.gas.countries[i,-length(year.grid)])
+    
+    c.fdata <- fData(year.grid[-1], c.fdata)
+    countries.diff.mfdata[[i]] <- c.fdata
+}
+
+countries.diff.mfdata <- as.mfData(countries.diff.mfdata)
+
+# Calculate Spearman Matrix and Plot
+countries.diff.SM <- cor_spearman(countries.diff.mfdata, ordering='MHI')
+
+# Plot
+corrplot(countries.diff.SM,
+         title = "Spearman Matrix")
 
