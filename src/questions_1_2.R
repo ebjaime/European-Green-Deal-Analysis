@@ -827,3 +827,119 @@ countries.diff.SM <- cor_spearman(countries.diff.mfdata, ordering='MHI')
 corrplot(countries.diff.SM,
          title = "Spearman Matrix")
 
+
+
+#######################
+# SSP year to year predictions (from intervals of 5 years) 
+#######################
+
+# SSP data cleaning
+library(openxlsx)
+
+ssp  <- read.xlsx("data/ssp_iiasa.xlsx",sheet=1) # Gross available energy, first sheet should be the best, even if in the presentation we chose the fourth
+
+ssp_clean_cols <- ssp[,c("SCENARIO","REGION","VARIABLE","UNIT","2010","2015",
+                         "2020","2025","2030","2035","2040","2045","2050","2055",
+                         "2060","2065","2070","2075","2080","2085","2090","2095",
+                         "2100" )]   
+
+country_codes <- data.frame(c(north_europe,east_europe,south_europe,central_europe),
+                            c("DNK","EST","LVA","LTU","FIN","SWE","NOR","ISL","GBR","IRL", #North
+                              "BGR","CZE","HUN","POL","ROU","SVK","TUR","UKR",
+                              "GRC","ESP","ITA","CYP","MLT","PRT","HRV","SVN","MKD","ALB","SRB",
+                              "FRA","BEL","DEU","LUX","NLD","AUT"))
+colnames(country_codes) <- c("Name","Code")
+
+country_name2code <- function(code="",name=""){
+    # Returns name and code for a given name or code
+    if(nchar(name)>1)
+        return(country_codes[country_codes["Name"] == name][2]) #return code
+    else if(nchar(code)>1)
+        return(country_codes[country_codes["Code"] == code][1]) #return name
+} 
+
+ssp_clean_cols[,-1:-4] <- lapply(ssp_clean_cols[,-1:-4], as.numeric) # transform data into numeric
+ssp_clean_cols[,"REGION"] <- sapply(ssp_clean_cols[,"REGION"], country_name2code) # Use country names
+
+ssp_eu <- ssp_clean_cols[!is.na(ssp_clean_cols$REGION),]
+
+# ssp_eu <- rbind(colnames(ssp_eu), ssp_eu) # if wanting to remove colnames and use as rows
+# colnames(ssp_eu) <- NULL 
+
+length(unique(ssp_eu$REGION)) == length(countries.list) # check if data for all countries is present
+
+
+# Divide GDP and Population datasets
+ssp_gdp <- ssp_eu[ssp_eu$VARIABLE=="GDP|PPP",] 
+ssp_pop <- ssp_eu[ssp_eu$VARIABLE=="Population",]
+
+
+
+# Obtain Year to year values from functional data
+library(fda)
+
+# countries.mfdata <- vector("list", length(ssp_gdp_ssp1$REGION)) 
+ssp.year.grid <- seq(2010,2100,5)
+
+ssp.year.grid.str <-c("2010","2015","2020","2025","2030","2035","2040","2045","2050","2055",
+                      "2060","2065","2070","2075","2080","2085","2090","2095","2100")
+
+# Create empty df to populate
+new.ssp_gdp <- data.frame(matrix(ncol = 4+length(2010:2100), nrow = 0))
+new.ssp_pop <- data.frame(matrix(ncol = 4+length(2010:2100), nrow = 0))
+
+for(ssp.var.idx in 1:2){
+    if(ssp.var.idx == 1)
+        ssp_ <- ssp_gdp
+    else
+        ssp_ <- ssp_pop
+    
+    for(sspX in unique(ssp_$SCENARIO)){  # For each scenario
+        ssp_sspX <- ssp_[ssp_$SCENARIO==sspX,]
+        for(c in 1:length(ssp_sspX$REGION)){ # For each country
+            
+            ssp_sspX.data <- as.numeric(ssp_sspX[c,ssp.year.grid.str]) # For first country + ssp1
+            
+            # With roahd
+            # f_data <- fData(ssp.year.grid, ssp_sspX[,ssp.year.grid.str])
+            # plot(f_data)
+            
+            times_basis <-ssp.year.grid 
+            knots    <- c(ssp.year.grid) #Location of knots
+            n_knots   <- length(knots) #Number of knots
+            n_order   <- 2 # order of basis functions: cubic bspline: order = 3 + 1
+            n_basis   <- length(knots) + n_order - 2;
+            
+            basis <- create.bspline.basis(c(min(times_basis),max(times_basis)),n_basis,n_order,knots)
+            # plot(basis)
+            
+            ys <- smooth.basis(argvals=times_basis, y=ssp_sspX.data, fdParobj = basis)
+            
+            xfd <- ys$fd
+            # plotfit.fd(ssp_sspX.data, times_basis, xfd) #  Plot the curve along with the data
+            
+            ssp_sspX.yby <- eval.fd(seq(2010,2100,1), xfd) # Obtain data year by year
+            
+            # plot(seq(2010,2100,1), ssp_ssp1.yby)
+            if(ssp.var.idx == 1)
+                new.ssp_gdp <- rbind(new.ssp_gdp, c(sspX, ssp_sspX$REGION[c],
+                                                 unique(ssp_$VARIABLE)[1],
+                                                 unique(ssp_$UNIT)[1],
+                                                 ssp_sspX.yby))
+            else
+                new.ssp_pop <- rbind(new.ssp_pop, c(sspX, ssp_sspX$REGION[c],
+                                                 unique(ssp_$VARIABLE)[1],
+                                                 unique(ssp_$UNIT)[1],
+                                                 ssp_sspX.yby))
+        }
+    }
+}
+# rename columns
+colnames(new.ssp_gdp) <- c(colnames(ssp_gdp[,1:4]), 2010:2100)    
+colnames(new.ssp_pop) <- c(colnames(ssp_pop[,1:4]), 2010:2100) 
+
+# Write to xlsx
+write.table(new.ssp_gdp, "data/ssp_iiasa_YtY_gdp.xlsx")
+write.table(new.ssp_pop, "data/ssp_iiasa_YtY_pop.xlsx")
+
+
