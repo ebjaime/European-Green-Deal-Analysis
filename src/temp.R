@@ -28,8 +28,6 @@ tto_2_tj <- function(tto) {
 
 
 # Load datasets
-# In energy balances we dont have the value Final Consumption (FC), but it can be estimated as sum of several
-# https://www.eea.europa.eu/data-and-maps/indicators/final-energy-consumption-by-sector-13
 energy.balances.1  <- read.xlsx("data/complete_energy_balances.xlsx",sheet=1) # Gross available energy, first sheet should be the best, even if in the presentation we chose the fourth
 
 consump.fossils  <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx",sheet=1) # Inland consumption
@@ -142,6 +140,8 @@ p_sweden
 
 year.min <- min(energy.balances.p[1,])
 year.max <- max(energy.balances.p[1,])
+year.grid <- seq(year.min, year.max)
+
 countries.list <- rownames(consump.fossils.p[-c(1,2,3,4),]) 
 
 energy.balances.countries <- energy.balances.p[-c(1,2,3,4),]
@@ -571,8 +571,6 @@ matplot(seq(year.min, year.max.2), consump.renew.p$`European Union - 27 countrie
 
 # Lets try to fit a linear model for the Fossil energy consumption and the Renew. Energiy consumption
 
-year.grid <- seq(year.min, year.max)
-
 # First with fossil fuels
 consump.fossils.lm=lm(consump.fossils.p$`European Union - 27 countries (from 2020)` ~ consump.fossils.p$year)
 summary(consump.fossils.lm)
@@ -830,7 +828,7 @@ corrplot(countries.diff.SM,
 
 
 #######################
-# SSP year to year predictions (from intervals of 5 years) 
+# SSP year to year smoothing (from intervals of 5 years) 
 #######################
 
 # SSP data cleaning
@@ -878,7 +876,6 @@ ssp_pop <- ssp_eu[ssp_eu$VARIABLE=="Population",]
 # Obtain Year to year values from functional data
 library(fda)
 
-# countries.mfdata <- vector("list", length(ssp_gdp_ssp1$REGION)) 
 ssp.year.grid <- seq(2010,2100,5)
 
 ssp.year.grid.str <-c("2010","2015","2020","2025","2030","2035","2040","2045","2050","2055",
