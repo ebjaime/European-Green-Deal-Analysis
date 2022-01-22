@@ -24,9 +24,13 @@ B=10000
 seed=1234
 ```
 
+```{r}
+data_ssp=read.xlsx("data/ssp_iiasa_YtY_gdp.xlsx",sheet=1)
+```
+
 
 ```{r}
-nrg_balances=read.xlsx('complete_energy_balances.xlsx',sheet=1)
+nrg_balances=read.xlsx('data/complete_energy_balances.xlsx',sheet=1)
 View(nrg_balances)
 ```
 
@@ -51,7 +55,7 @@ matplot(colnames(nrg_balances),t(nrg_balances[4:38,]),type='l',xlab="Year",ylab=
 
 Percentage of renewable use over total energy
 ```{r}
-percentage_renew=read.xlsx('percentage_renewables.xlsx')
+percentage_renew=read.xlsx('data/percentage_renewables.xlsx')
 View(percentage_renew)
 ```
 
@@ -234,7 +238,7 @@ for(perm in 1:B){
 hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30,main="Wilks stat permutational distribution")
 abline(v=T0,col=3,lwd=2)
 
-plot(ecdf(T_stat),xlim=c(-2,1),main="Wilk stat ecdf")
+plot(ecdf(T_stat),xlim=c(-2,1),main="Wilks stat ecdf")
 abline(v=T0,col=3,lwd=4)
 
 # p-value
@@ -245,12 +249,58 @@ So here we have statistical evidence that the three main renewable sources have 
 
 We can further investigate whether Solar and Wind are equally distributed (i.e. developing at the same rate) or not.
 
+```{r}
+wind.mean = colMeans(use_wind_elec[4:40,]) #combustible fuels
+solar.mean = colMeans(use_solar_elec[4:40,]) #renewables
+years_04_19=as.numeric(colnames(use_wind_elec)) #years from 2004 to 2019
+
+matplot(years_04_19,t(rbind(wind.mean,solar.mean)), type='l', col=c("green","red"), lty=1,xlab="Year",ylab="Gigawatt-hour",main="Mean electricity production")
+legend("topleft",legend=c("Wind","Solar"),col=c(3,2),pch=1)
+```
+
+```{r}
+n1 = n2=dim(use_wind_elec[4:40,])[1]
+n  = n1 + n2
+
+T20 = as.numeric((wind.mean-solar.mean) %*% (wind.mean-solar.mean))
+T20
+
+# Estimating the permutational distribution under H0
+
+T2 = numeric(B)
+set.seed(seed)
+t_pooled = rbind(use_wind_elec[4:40,],use_solar_elec[4:40,])
+
+for(perm in 1:B){
+  # Random permutation of indexes
+  permutation = sample(n)
+  t_perm = t_pooled[permutation,]
+  t1_perm = t_perm[1:n1,]
+  t2_perm = t_perm[(n1+1):n,]
+  
+  # Evaluation of the test statistic on permuted data
+  t1.mean_perm = colMeans(t1_perm)
+  t2.mean_perm = colMeans(t2_perm)
+  T2[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+}
+
+hist(T2,xlim=range(c(T2,T20)),main="Squared L2 norm of means difference - permutational distribution")
+abline(v=T20,col=3,lwd=4)
+
+plot(ecdf(T2),main="Squared L2 norm of means difference - permutational ecdf")
+abline(v=T20,col=3,lwd=4)
+
+pvalue=sum(T2>=T20)/B
+pvalue
+```
+
+
 We'll exploit local testing of this hypothesis, to (in case of rejection) directly obtain the time instant in which the developments are different
 
 ```{r}
 library(fdatest)
 
-loc_test=IWT2(as.matrix(use_solar_elec),as.matrix(use_wind_elec))
+loc_test=IWT2(as.matrix(use_wind_elec),as.matrix(use_solar_elec),B=B,alternative="greater")
 plot(loc_test,main="Solar and Wind",col=c(2,3))
 ```
 
@@ -364,15 +414,18 @@ with(vec, plot(year ,value ,xlim=range(dat$year) ,cex =.5, col =" darkgrey "))
 lines(dat$year,preds$fit ,lwd =2, col =" blue")
 matlines(dat$year, se.bands ,lwd =1, col =" blue",lty =3)
 ```
+```{r}
+dif_use_wind_elec=use_wind_elec[,-1]-use_wind_elec[,-length(use_wind_elec)]
+```
 
 
 
 ```{r}
 library(jsonlite)
 
-list_vec=flatten(use_wind_elec[4:40,])
+list_vec=flatten(dif_use_wind_elec[4:40,])
 vec_wind=cbind(list_vec[[1]],rep(2004,37))
-for (j in 2:16){
+for (j in 2:15){
   v=cbind(list_vec[[j]],rep(2004+j-1,37))
   vec_wind=rbind(vec_wind,v)
 }
@@ -387,7 +440,7 @@ year.grid=seq(range(vec_wind$year)[1],2024,by=0.1)
 
 preds=predict(model_poly_wind,list(year=year.grid),se=T)
 
-
+summary(model_poly_wind)
 ```
 
 ```{r}
@@ -402,9 +455,20 @@ c_preds_wind=conformal.pred(design_matrix,vec_wind$value_wind,pred_grid,alpha=0.
 with(vec_wind, plot(year ,value_wind ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Wind'))
 lines(year.grid,preds$fit ,lwd =2, col =" green")
 lines(year.grid,c_preds_wind$pred ,lwd =2, col ="red",lty=3)
-lines(year.grid,numeric(length(year.grid)),lwd=1,col="green",lty=3)
+#lines(year.grid,numeric(length(year.grid)),lwd=1,col="green",lty=3)
 matlines(year.grid ,c_preds_wind$up ,lwd =1, col =" green",lty =3)
+matlines(year.grid ,c_preds_wind$lo ,lwd =1, col =" green",lty =3)
 ```
+```{r}
+pos=rep(c(TRUE,rep(FALSE,9)),15)
+pos=c(pos,rep(FALSE,51))
+predictions_wind=c_preds_wind$pred[pos]
+res_belgium=as.numeric(dif_use_wind_elec[20,]-predictions_wind)
+plot(res_belgium)
+```
+
+
+
 ```{r}
 list_vec=flatten(use_solar_elec[4:40,])
 vec_solar=cbind(list_vec[[1]],rep(2004,37))
@@ -459,7 +523,7 @@ year.grid=seq(range(vec_hydro$year)[1],2024,by=0.1)
 
 preds=predict(model_poly_hydro,list(year=year.grid),se=T)
 
-
+summary(model_poly_hydro)
 ```
 
 ```{r}
