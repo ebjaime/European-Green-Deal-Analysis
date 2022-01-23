@@ -248,7 +248,7 @@ p.values.re <- numeric(length(countries.list)) # RE
 for(c in 1:length(countries.list)){
     p.values.ff[c] <- shapiro.test(t(consump.fossils.countries)[,c])$p.value
     p.values.op[c] <- shapiro.test(t(consump.oil.petr.countries)[,c])$p.value
-    p.values.ng[c] <- shapiro.test(t(consump.gas.countries)[,c])$p.value # Ignore errors
+    # p.values.ng[c] <- shapiro.test(t(consump.gas.countries)[,c])$p.value # Ignore errors
     p.values.re[c] <- shapiro.test(t(consump.renew.countries)[,c])$p.value
 
 
@@ -256,7 +256,7 @@ for(c in 1:length(countries.list)){
 }
 hist(p.values.ff) # Shapiro-Wilk test might fail with small n values
 hist(p.values.op) # Shapiro-Wilk test might fail with small n values
-hist(p.values.ng) # Shapiro-Wilk test might fail with small n values
+# hist(p.values.ng) # Shapiro-Wilk test might fail with small n values
 hist(p.values.re) # Shapiro-Wilk test might fail with small n values
 ```
 

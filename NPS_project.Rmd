@@ -1,106 +1,668 @@
 ---
-title: "NPS project"
+title: "NPS_project"
 output: html_document
-editor_options: 
-  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# TITLE
+TODO: Rerun everything
+Load necessary libraries:
+
 ```{r}
+# General
 library(openxlsx)
-library(roahd)
-library(rgl)
-library(fda.usc) #install if necessary
+library(MASS)
+library(progress)
 library(np)
 library(splines)
 library(devtools)
-#devtools::install_github(repo="ryantibs/conformal", subdir="conformalInference")
+library(tidyr)
+# Depth
+#library(DepthProc)
+#library(robustbase)
+# Functional data
+library(roahd)
+library(fda)
+library(fdatest)
+# Graphics packages
+library(rgl)
+library(hexbin)
+library(ggplot2)
+library(rgl)
+library(corrplot)
+# GAM
+library(mgcv)
+# Conformal
 library(conformalInference)
 
-B=10000
-seed=1234
+
+B=100000
+seed=42
 ```
 
+### Preprocessing of data
+
+Auxiliary functions for preprocessing of data:
 
 ```{r}
-nrg_balances=read.xlsx('complete_energy_balances.xlsx',sheet=1)
-View(nrg_balances)
-```
 
-```{r}
-nrg_balances=nrg_balances[7:50,]    #quit useless rows
-colnames(nrg_balances)=nrg_balances[1,] #use years as columns names
-nrg_balances=nrg_balances[-1,] #first row now is useless
-rownames(nrg_balances)=nrg_balances[,1] #use countries as row names
-nrg_balances=nrg_balances[,-1] #first column is now useless
-
-```
-
-Let's quit empty values, signaled with the character ":"
-```{r}
-nrg_balances=nrg_balances[!nrg_balances[,1]==':',]
-```
-
-A first plot of total energy consumption
-```{r}
-matplot(colnames(nrg_balances),t(nrg_balances[4:38,]),type='l',xlab="Year",ylab="Thousand tonnes of oil equivalent",main="Total energy consumption")
-```
-
-Percentage of renewable use over total energy
-```{r}
-percentage_renew=read.xlsx('percentage_renewables.xlsx')
-View(percentage_renew)
-```
-
-```{r}
-percentage_renew=percentage_renew[6:46,]    #quit useless rows
-colnames(percentage_renew)=percentage_renew[1,] #use years as columns names
-percentage_renew=percentage_renew[-1,] #first row now is useless
-rownames(percentage_renew)=percentage_renew[,1] #use countries as row names
-percentage_renew=percentage_renew[,-1] #first column is now useless
-```
-
-
-```{r}
-percentage_renew=percentage_renew[!percentage_renew[,1]==':',]
-for (j in 1:16){
-  percentage_renew[,j]=as.numeric(percentage_renew[,j])  #convert characters to numeric
+# 1000 Tons Of Oil Equivalent to Terajoules = 41.1868
+tto_2_tj <- function(tto) {
+    return(tto * 41.868)
 }
-percentage_renew=round(percentage_renew,4)
-View(percentage_renew)
+
+# Function cleans df removing NAN rows, setting values as numeric...
+preprocess <- function(df, start_nrows=6, end_nrows=2, tj=T) { 
+    
+    # Remove first rows not containing significant data
+    df <- df[-c(1:start_nrows,(dim(df)[1]-(end_nrows-1)):dim(df)[1]),]
+    
+    rownames(df) <- df[,1]
+    df <- df[,-1]
+    
+    rownames(df)[1] <- "year"
+    
+    # Remove rows with NA values 
+    df <- df[!df[,1]==':',]
+    
+    
+    # 3 decimals
+    df[] <- lapply(df, as.numeric)  
+    
+    if(!tj) # All data should be converted to Terajoules
+        df[-1,] <- lapply(df[-1,], tto_2_tj)
+    
+    return(df)
+}
 ```
+
+
+In our script "preprocessing_SSP.rmd", we have additional code regarding the transformation of data of the SSP original data to fit our needs and located in "data/ssp_iiasa_YtY_gdp.xlsx" & "data/ssp_iiasa_YtY_pop.xlsx".
+
+
+
+# Starting Point: Analysis of current European Renewable Transition
+
+
+Loading necessary datasets. In energy balances we dont have the value Final Consumption (FC), but it can be estimated as sum of several.
+
+```{r}
+energy.balances.1  <- read.xlsx("data/complete_energy_balances.xlsx",sheet=1) # Gross available energy, first sheet should be the best
+
+consump.fossils  <- read.xlsx("data/consumption_solid_fossil_fuels.xlsx",sheet=1) # Inland consumption
+consump.gas      <- read.xlsx("data/consumption_gas.xlsx",sheet=1) # Inland consumption
+consump.oil.petr <- read.xlsx("data/consumption_oil_petroleum.xlsx",sheet=1) # Inland consumption
+
+consump.renew.1  <- read.xlsx("data/consumption_renewables.xlsx",sheet=1) # Geothermal, inland consump
+consump.renew.2  <- read.xlsx("data/consumption_renewables.xlsx",sheet=2) # Solar thermal, inland consump.
+consump.renew.3  <- read.xlsx("data/consumption_renewables.xlsx",sheet=3) # Biofuels, inland consump.
+consump.renew.4  <- read.xlsx("data/consumption_renewables.xlsx",sheet=4) # Biogases, inland consump.
+consump.renew.5  <- read.xlsx("data/consumption_renewables.xlsx",sheet=5) # Renewable waste, inland consump.
+
+percent.renew <- read.xlsx("data/percentage_renewables.xlsx") 
+
+prod.by.fuel <- read.xlsx("data/production_capacities_by_fuel.xlsx")
+```
+
+We will now preprocess all datasets with our auxilary function. We will also compute the total Renewable energy's consumption levels by summing all the consumptions for all types of Renewable sources.
+
+```{r}
+
+energy.balances.p <- preprocess(energy.balances.1, tj=F)
+
+consump.fossils.p <- preprocess(consump.fossils[,-32], tj=T) # wo 2020
+
+consump.fossils.p[-1,] <- consump.fossils.p[-1,] * 25 #  Calorific power of FF
+                                 
+consump.oil.petr.p <- preprocess(consump.oil.petr[,-32], tj=F) # wo 2020
+consump.gas.p      <- preprocess(consump.gas[,-32], tj=T) # wo 2020
+
+
+consump.renew.1.p <- preprocess(consump.renew.1[,-32])
+consump.renew.2.p <- preprocess(consump.renew.2[,-32])
+consump.renew.3.p <- preprocess(consump.renew.3[,-32])
+consump.renew.4.p <- preprocess(consump.renew.4[,-32])
+consump.renew.5.p <- preprocess(consump.renew.5[,-32])
+
+consump.renew.p <- consump.renew.1.p # Sum of all renewable energies
+consump.renew.p[-1,] <- consump.renew.p[-1,] + consump.renew.2.p[-1,] + consump.renew.3.p[-1,] +
+    consump.renew.4.p[-1,] + consump.renew.5.p[-1,]
+
+
+```
+
+We can check what we obtain in total:
+
+```{r}
+consump.total.p <-  consump.renew.p[2,1] +
+                    consump.oil.petr.p[2,1] +
+                    consump.fossils.p[2,1] +
+                    consump.gas.p[2,1]
+                    # derived.heat +
+                    # electricity 
+consump.total.p
+```
+
+
+To visualize the obtained data, we can plot the energy balances and consumption levels for two countries:
+
+```{r}
+p_italy <- ggplot(data=as.data.frame(t(energy.balances.p)), aes(x=year, y=Italy)) +
+            labs(title="Energy Balances Progression - Italy", 
+                 subtitle="Gross Available Energy") +
+            xlab("Year") + ylab("Terajoules") +
+            geom_point() +
+            geom_smooth(method="loess", formula=y~x, fill="blue", colour="darkblue", size=1)
+p_italy
+```
+
+```{r}
+# Example of consumption of solid fossil fuels
+p_sweden <- ggplot(data=as.data.frame(t(consump.fossils.p)), aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
+            labs(title="Consumption Solid Fossil Fuels - Sweden", 
+                 subtitle="Inland consumption") +
+            xlab("Year") + ylab("Terajoules") +
+            geom_point() +
+            geom_smooth(method="loess", formula=y~x, fill="red", colour="darkred", size=1)
+p_sweden
+
+```
+
+We will also create some auxiliary variables & datasets, so it is easier to follow what we are doing. 
+```{r}
+year.min       <- min(energy.balances.p[1,])
+year.max       <- max(energy.balances.p[1,])
+year.grid      <- seq(year.min, year.max)
+
+countries.list <- rownames(consump.fossils.p[-c(1,2,3,4),]) 
+
+# Removal of total EU levels on all datasets 
+energy.balances.countries  <- energy.balances.p[-c(1,2,3,4),]
+consump.fossils.countries  <- consump.fossils.p[-c(1,2,3,4),]
+consump.oil.petr.countries <- consump.oil.petr.p[-c(1,2,3,4),]
+consump.gas.countries      <- consump.gas.p[-c(1,2,3,4),]
+consump.renew.countries    <- consump.renew.p[-c(1,2,3,4),]
+
+colnames(energy.balances.countries) <- NULL
+colnames(consump.fossils.countries) <- NULL
+colnames(consump.oil.petr.countries) <- NULL
+colnames(consump.gas.countries) <- NULL
+colnames(consump.renew.countries) <- NULL
+```
+
+We obtain the differences year to year for each 
+```{r}
+energy.balances.diff <- energy.balances.p[-1,-length(energy.balances.p)] - energy.balances.p[-1,-1]
+consump.fossils.diff <- consump.fossils.p[-1,-length(consump.fossils.p)] - consump.fossils.p[-1,-1]
+consump.oil.petr.diff <- consump.oil.petr.p[-1,-length(consump.oil.petr.p)] - consump.oil.petr.p[-1,-1]
+consump.gas.diff <- consump.gas.p[-1,-length(consump.gas.p)] - consump.gas.p[-1,-1]
+consump.renew.diff <- consump.renew.p[-1,-length(consump.renew.p)] - consump.renew.p[-1,-1]
+
+energy.balances.diff <- rbind(year=seq(1991, 2019), energy.balances.diff)
+consump.fossils.diff <- rbind(year=seq(1991, 2019), consump.fossils.diff)
+consump.oil.petr.diff <- rbind(year=seq(1991, 2019), consump.oil.petr.diff)
+consump.gas.diff <- rbind(year=seq(1991, 2019), consump.gas.diff)
+consump.renew.diff <- rbind(year=seq(1991, 2019), consump.renew.diff)
+```
+
+
+We can divide this section into three points.
+
+## 1. What is the trend of renewable and non-renewable consumptions.
+
+
+We can visualize the consumption levels of all EU countries.
+
+Via time series visualization:
+```{r}
+matplot(seq(year.min, year.max), t(energy.balances.countries), type="l", lty=1,
+        main="Energy Balances EU 1990 - 2019", xlab="Year", ylab="Terajoules")
+
+matplot(seq(year.min, year.max), t(consump.fossils.countries), type="l", lty=1,
+        main="Consumption of solid fossil fuels EU 1990 - 2019", xlab="Year",
+        ylab="Terajoules")
+
+matplot(seq(year.min, year.max), t(consump.oil.petr.countries), type="l", lty=1,
+        main="Consumption of Oil and Petroleum EU 1990 - 2019", xlab="Year",
+        ylab="Terajoules")
+
+matplot(seq(year.min, year.max), t(consump.gas.countries), type="l", lty=1,
+        main="Consumption of Natural Gas EU 1990 - 2019", xlab="Year",
+        ylab="Terajoules")
+
+matplot(seq(year.min, year.max), t(consump.renew.countries), type="l", lty=1,
+        main="Consumption of RE EU 1990 - 2019", xlab="Year",
+        ylab="Terajoules")
+```
+
+Via boxplot:
+```{r}
+boxplot(energy.balances.countries, main="Boxplot Energy Balances", xlab="Countries", 
+        ylab="Terajoules")
+
+boxplot(consump.fossils.countries, main="Boxplot of Consumption of Solid Fossil Fuels", xlab="Countries", 
+        ylab="Terajoule")
+
+boxplot(consump.oil.petr.countries, main="Boxplot of Consumption of Oil and Petroleum", xlab="Countries", 
+        ylab="Terajoule")
+
+boxplot(consump.gas.countries, main="Boxplot of Consumption of Natural Gas", xlab="Countries", 
+        ylab="Terajoule")
+
+boxplot(consump.renew.countries, main="Consumption of Renewables", xlab="Countries", 
+        ylab="Terajoule")
+```
+
+
+First let us check for normality with a simple Shapiro-Wilk test.
+
+Let us visualize a random country from the dataset and check whether it might be normaly distributed:
+
+```{r}
+
+index.italy <- which(rownames(consump.renew.countries) == c("Italy"))
+hist(t(consump.fossils.countries)[,index.italy])
+hist(t(consump.oil.petr.countries)[,index.italy])
+hist(t(consump.gas.countries)[,index.italy])
+hist(t(consump.renew.countries)[,index.italy])
+
+```
+
+Now to check the distribution of p-values obtained with a Shapiro-Wilk test:
+```{r}
+
+p.values.ff <- numeric(length(countries.list)) # Fossil fuels
+p.values.op <- numeric(length(countries.list)) # Oil&Petr.
+p.values.ng <- numeric(length(countries.list)) # Natural gas 
+p.values.re <- numeric(length(countries.list)) # RE
+for(c in 1:length(countries.list)){
+    p.values.ff[c] <- shapiro.test(t(consump.fossils.countries)[,c])$p.value
+    p.values.op[c] <- shapiro.test(t(consump.oil.petr.countries)[,c])$p.value
+    p.values.ng[c] <- shapiro.test(t(consump.gas.countries)[,c])$p.value # Ignore errors
+    p.values.re[c] <- shapiro.test(t(consump.renew.countries)[,c])$p.value
+
+
+    
+}
+hist(p.values.ff) # Shapiro-Wilk test might fail with small n values
+hist(p.values.op) # Shapiro-Wilk test might fail with small n values
+hist(p.values.ng) # Shapiro-Wilk test might fail with small n values
+hist(p.values.re) # Shapiro-Wilk test might fail with small n values
+```
+
+### Permutational Two Population MV test - Comparing Consumption distributions
+
+We want to compare the distributions of NR vs R fuels for each country:
+```{r}
+consump.fossils.mean <- colMeans(consump.fossils.countries, na.rm=T)
+consump.oil.petr.mean <- colMeans(consump.oil.petr.countries, na.rm=T)
+consump.gas.mean <- colMeans(consump.gas.countries, na.rm=T)
+consump.renew.mean <- colMeans(consump.renew.countries, na.rm=T)
+
+matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
+                                       consump.oil.petr.mean,
+                                       consump.gas.mean,
+                                       consump.renew.mean)),
+        type="l",main="Consumption means for each type of fuel",xlab="Years",ylab="Terajoules",
+        ylim=c(0,range(consump.fossils.mean)[2]+300000))
+
+legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas","Renewable Energies"), col=1:4, pch=2)
+
+
+```
+
+Renewable consumption and Fossil Fuels are very different from oil & petr. and natural gas consumption.
+But do these last two follow the same distribution?
 
 
 ```{r}
-matplot(colnames(percentage_renew),t(percentage_renew[4:39,]),type='l',xlab="Year",ylab="Percentage",main="Energy from renewables")
+
+# H0: Distributions are equal
+# H1: Distributions are not equal
+
+# NG vs OP ----------------------------------------------------------------
+
+n1 <- dim(as.matrix(consump.gas.mean))[1]
+n2 <- dim(as.matrix(consump.oil.petr.mean))[1]
+n  <- n1 + n2
+
+# Test statistic
+T10 <- as.numeric((consump.gas.mean-consump.oil.petr.mean) %*% (consump.gas.mean-consump.oil.petr.mean))
+T10
+
+# Permutational distribution
+T1 <- numeric(B)
+set.seed(seed)
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+
+for(perm in 1:B){
+    t_pooled = rbind(consump.gas.countries, consump.oil.petr.countries)
+    permutation = sample(n)
+    t_perm = t_pooled[permutation,]
+    t1_perm = t_perm[1:n1,]
+    t2_perm = t_perm[(n1+1):n,]
+    
+    # Evaluation of the test statistic on permuted data
+    t1.mean_perm = colMeans(t1_perm, na.rm = T)
+    t2.mean_perm = colMeans(t2_perm, na.rm = T)
+    T1[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+    
+    pb$tick()
+    
+}
+
+# Graphics for the permutational distribution
+hist(T1,xlim=range(c(T1,T10)))
+abline(v=T10,col=3,lwd=4)
+
+plot(ecdf(T1))
+abline(v=T10,col=3,lwd=4)
+
+# Calculate p-value
+p_val <- sum(T1>=T10)/B
+p_val
+
 ```
 
-Current leader:
 ```{r}
-rownames(percentage_renew)[which.max(percentage_renew[4:39,16])+3]
+
+# FF vs OP ----------------------------------------------------------------
+
+n1 <- dim(as.matrix(consump.fossils.mean))[1]
+n2 <- dim(as.matrix(consump.oil.petr.mean))[1]
+n  <- n1 + n2
+
+# Test statistic
+T20 <- as.numeric((consump.fossils.mean-consump.oil.petr.mean) %*% (consump.fossils.mean-consump.oil.petr.mean))
+T20
+
+# Permutational distribution
+T2 <- numeric(B)
+set.seed(seed)
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+
+for(perm in 1:B){
+    t_pooled = rbind(consump.fossils.countries, consump.oil.petr.countries)
+    permutation = sample(n)
+    t_perm = t_pooled[permutation,]
+    t1_perm = t_perm[1:n1,]
+    t2_perm = t_perm[(n1+1):n,]
+    
+    # Evaluation of the test statistic on permuted data
+    t1.mean_perm = colMeans(t1_perm, na.rm = T)
+    t2.mean_perm = colMeans(t2_perm, na.rm = T)
+    T2[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+    
+    pb$tick()
+    
+}
+
+# Graphics for the permutational distribution
+hist(T2,xlim=range(c(T2,T20)))
+abline(v=T20,col=3,lwd=4)
+
+plot(ecdf(T2))
+abline(v=T20,col=3,lwd=4)
+
+# Calculate p-value
+p_val <- sum(T2>=T20)/B
+p_val
+
 ```
 
-Countries over 40%:
+
+What about using year-to-year variates? Does the renew. consumption follow the same distribution as fossils or oil & petr. consumption?
 ```{r}
-rownames(percentage_renew)[which(percentage_renew[4:39,16]>=40.0)+3]
+
+# RE vs OP ----------------------------------------------------------------
+# Use year by year change of each energy (RE vs OP (or NG or FF))
+
+mean.consump.nonrenew <- ( consump.fossils.countries[,]+consump.gas.countries[,]+consump.oil.petr.countries[,] )/3
+mean.consump.nonrenew.mean=colMeans(mean.consump.nonrenew)
+
+matplot(seq(year.min, year.max), t(rbind(mean.consump.nonrenew.mean,
+                                         consump.renew.mean)),
+        type="l",main="Consumption means renewables vs non-renewables",xlab="Years",ylab="Terajoules",
+        ylim=c(0,range(mean.consump.nonrenew.mean)[2]+300000),col=c(1,3),lty=c(1,1))
+legend("topright",legend=c("Non-renewable sources","Renewable sources"),col=c(1,3),pch=2)
+
+
+mean.consump.nonrenew.diff <- mean.consump.nonrenew[,-length(mean.consump.nonrenew)] - mean.consump.nonrenew[,-1] #"inverse" deltas to obtain growing curve differences
+consump.renew.diff <- consump.renew.countries[,-1] - consump.renew.countries[,-length(consump.renew.countries)]
+
+mean.consump.nonrenew.diff.mean <- colMeans(mean.consump.nonrenew.diff, na.rm=T)
+consump.renew.diff.mean <- colMeans(consump.renew.diff, na.rm=T)
+
+matplot(seq(year.min+1,year.max), consump.renew.diff.mean,type="l",ylab="Terajoules",xlab="Years",
+        main="Renewable consumptions year to year average deltas",col="green")
+matlines(seq(year.min+1,year.max), mean.consump.nonrenew.diff.mean,type="l",ylab="Terajoules",xlab="Years",
+        main="Mean non-renewable consumptions year to year inverse average deltas")
+
+
+n1 <- dim(as.matrix(consump.renew.diff))[1]
+n2 <- dim(as.matrix(mean.consump.nonrenew.diff))[1]
+n  <- n1 + n2
+
+# Test statistic
+T30 <- as.numeric((consump.renew.diff.mean-mean.consump.nonrenew.diff.mean) %*% (consump.renew.diff.mean-mean.consump.nonrenew.diff.mean))
+T30
+
+# Permutational distribution
+T3 <- numeric(B)
+set.seed(seed)
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+
+for(perm in 1:B){
+    t_pooled <- cbind(consump.renew.diff,mean.consump.nonrenew.diff)
+    permutation <- sample(n)
+    t_perm <- t_pooled[permutation,]
+    t1_perm <- t_perm[1:n1,]
+    t2_perm <- t_perm[(n1+1):n,]
+    
+    # Evaluation of the test statistic on permuted data
+    t1.mean_perm <- colMeans(t1_perm, na.rm = T)
+    t2.mean_perm <- colMeans(t2_perm, na.rm = T)
+    T3[perm]  <- (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+    
+    pb$tick()
+    
+}
+
+# Graphics for the permutational distribution
+hist(T3,xlim=range(c(T3,T30)),main="Squared L2 norm of means difference - permutational distribution")
+abline(v=T30,col=3,lwd=4)
+
+plot(ecdf(T3),main="Squared L2 norm of means difference - permutational ecdf")
+abline(v=T30,col=3,lwd=4)
+
+# Calculate p-value
+p_val <- sum(T3>=T30)/B
+p_val
+
 ```
+
+
+###  Two way permutational ANOVA - Oil & Petr. consumption + Renewables to represent Energy Balances 
+
+For each country we obtain a diff. ANOVA. E.g. Belgium:
+```{r}
+aov_Belgium <- aov(energy.balances.countries$Belgium ~ consump.oil.petr.countries$Belgium +       #are these factors? Maybe a linear model should make more sense
+                                        consump.renew.countries$Belgium +
+                                        consump.renew.countries$Belgium:consump.oil.petr.countries$Belgium)
+
+summary(aov_Belgium)
+```
+
+We could repeat the same procedure for the total levels of the 27 EU countries:
+```{r}
+aov_EU <- aov(energy.balances.p$`European Union - 27 countries (from 2020)` ~
+                  consump.oil.petr.p$`European Union - 27 countries (from 2020)`[-1] + 
+                  consump.renew.p$`European Union - 27 countries (from 2020)`[-1] +
+                  consump.renew.p$`European Union - 27 countries (from 2020)`[-1]:
+                  consump.oil.petr.p$`European Union - 27 countries (from 2020)`[-1])
+summary(aov_EU)
+
+```
+
+With this in mind, we could test if the relation bw Renewable and Non-Renewable can be ignored in a LM model.
+```{r}
+# H0: gamma = 0
+# H1: gamma != 0
+T0_oil_renew <- summary.aov(aov_EU)[[1]][3,4] # F-value
+T0_oil_renew
+
+# Compute the permutational distribution to calculate p-value
+aov_EU.H0 <- aov(energy.balances.p$`European Union - 27 countries (from 2020)` ~
+                  consump.oil.petr.p$`European Union - 27 countries (from 2020)`[-1] + 
+                  consump.renew.p$`European Union - 27 countries (from 2020)`[-1])
+aov_EU.H0
+
+residuals_EU.H0 <- aov_EU.H0$residuals
+n <- length(energy.balances.p$`European Union - 27 countries (from 2020)`) 
+
+
+T_oil_renew <- numeric(B)
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+
+for(perm in 1:B){
+    permutation <- sample(n)
+    residuals_EU.H0 <- residuals_EU.H0[permutation]
+    energy.balances.perm.H0 <- aov_EU.H0$fitted + residuals_EU.H0
+    T_oil_renew[perm] <- summary.aov(aov(energy.balances.perm.H0 ~ 
+                                     consump.oil.petr.p$`European Union - 27 countries (from 2020)`[-1] + 
+                                     consump.renew.p$`European Union - 27 countries (from 2020)`[-1] +
+                                     consump.renew.p$`European Union - 27 countries (from 2020)`[-1]:
+                                     consump.oil.petr.p$`European Union - 27 countries (from 2020)`[-1]))[[1]][3,4]
+    pb$tick()
+}
+
+p_val <- sum(T_oil_renew >= T0_oil_renew)/B
+p_val # Significant p-value
+
+```
+
+
+### Two sample paired MV test - Comparing Countries for diff. consumptions
+
+ We can compare Italy's consumption of fossil fuels + renewables + petroleum vs Spain's.
+ 
+```{r}
+country1 <- "Spain"
+country2 <- "Italy"
+c12 <- c(country1, country2)
+# Plot their respective boxplot's
+boxplot(energy.balances.countries[c12],
+        main="Boxplot Energy Balances", xlab="Countries", 
+        ylab="Thousand tonnes of oil equivalent")
+
+boxplot(consump.fossils.countries[c12],
+        main="Boxplot of Consumption of Solid Fossil Fuels", xlab="Countries", 
+        ylab="Thousand tonnes (solid fossil fuels)")
+
+boxplot(consump.oil.petr.countries[c12],
+        main="Boxplot of Consumption of Oil and Petroleum", xlab="Countries", 
+        ylab="Thousand tonnes (oil and petroleum products)")
+
+boxplot(consump.renew.countries[c12], 
+        main="Consumption of Renewables", xlab="Countries", 
+        ylab="Terajoule")
+
+# Create matrices for each country
+t1 <- cbind(energy.balances.countries[,country1], 
+            consump.fossils.countries[,country1],  #quit -1
+            consump.oil.petr.countries[,country1], #quit -1
+            consump.renew.countries[,country1])    #quit -1
+
+t2 <- cbind(energy.balances.countries[country2], 
+            consump.fossils.countries[,country2],
+            consump.oil.petr.countries[,country2],
+            consump.renew.countries[,country2])
+# Calculate means per consumption
+t1.mean <- colMeans(t1)
+t2.mean <- colMeans(t2)
+
+p  <- dim(t1)[2] # Number of cols
+n1 <- dim(t1)[1] # Number of rows
+n2 <- dim(t2)[1] # Number of rows
+n <- n1+n2
+
+t1.cov  <-  cov(t1)
+t2.cov  <-  cov(t2)
+Sp      <- ((n1-1)*t1.cov + (n2-1)*t2.cov)/(n1+n2-2)
+Spinv   <- solve(Sp)
+
+delta.0 <- rep(0, p) # Assumed value for means 
+
+diff <- t1-t2
+diff.mean <- colMeans(diff)
+diff.cov <- cov(diff)
+diff.invcov <- solve(diff.cov)
+
+# Computing the statistic
+T30 <- as.numeric((diff.mean-delta.0)  %*% (diff.mean-delta.0))
+
+# Permutational test
+T3 <- numeric(B)
+set.seed(seed)
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+
+for(perm in 1:B){
+    # Random permutation
+    signs.perm <- rbinom(n1, 1, 0.5)*2 - 1
+    
+    diff_perm <- diff * matrix(signs.perm,nrow=n1,ncol=p,byrow=FALSE)
+    diff.mean_perm <- colMeans(diff_perm)
+    diff.cov_perm <- cov(diff_perm)
+    diff.invcov_perm <- solve(diff.cov_perm)
+    
+    T3[perm] <- as.numeric((diff.mean_perm-delta.0) %*% (diff.mean_perm-delta.0))
+    
+    pb$tick()
+}
+
+# plotting the permutational distribution under H0
+hist(T3,xlim=range(c(T2,T20)),breaks=100)
+abline(v=T30,col=3,lwd=4)
+
+plot(ecdf(T3))
+abline(v=T30,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T3>=T30)/B
+p_val
+
+```
+ 
+
+## 2. How is electricity production coming from renewable sources growing?
 
 Total electricity production
+
 ```{r}
-tot_elec=read.xlsx('data/total_electricity_use.xlsx')
-View(tot_elec)
+tot_elec <- read.xlsx('data/total_electricity_use.xlsx')
+# View(tot_elec)
 
-tot_elec=tot_elec[7:51,]    #quit useless rows
-colnames(tot_elec)=tot_elec[1,] #use years as columns names
-tot_elec=tot_elec[-1,] #first row now is useless
-rownames(tot_elec)=tot_elec[,1] #use countries as row names
-tot_elec=tot_elec[,c(-1,-18)] #first column is now useless and don't consider 2020
+tot_elec <- tot_elec[7:51,]    #quit useless rows
+colnames(tot_elec) <- tot_elec[1,] #use years as columns names
+tot_elec <- tot_elec[-1,] #first row now is useless
+rownames(tot_elec) <- tot_elec[,1] #use countries as row names
+tot_elec <- tot_elec[,c(-1,-18)] #first column is now useless and don't consider 2020
 
-tot_elec=tot_elec[!tot_elec[,1]==':',]
-View(tot_elec)
+tot_elec <- tot_elec[!tot_elec[,1]==':',]
+# View(tot_elec)
 
 tot_elec[] <- lapply(tot_elec, as.numeric) #convert to numeric
 
@@ -111,17 +673,17 @@ matplot(colnames(tot_elec),t(tot_elec[4:39,]),type='l',xlab="Year",ylab="Gigawat
 Production of electricity from renewables dataset
 
 ```{r}
-use_renew_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=1)
-View(use_renew_elec)
+use_renew_elec <- read.xlsx('data/use_renew_elec.xlsx',sheet=1)
+# View(use_renew_elec)
 
-use_renew_elec=use_renew_elec[7:48,]    #quit useless rows
-colnames(use_renew_elec)=use_renew_elec[1,] #use years as columns names
-use_renew_elec=use_renew_elec[-1,] #first row now is useless
-rownames(use_renew_elec)=use_renew_elec[,1] #use countries as row names
-use_renew_elec=use_renew_elec[,-1] #first column is now useless
+use_renew_elec <- use_renew_elec[7:48,]    #quit useless rows
+colnames(use_renew_elec) <- use_renew_elec[1,] #use years as columns names
+use_renew_elec <- use_renew_elec[-1,] #first row now is useless
+rownames(use_renew_elec) <- use_renew_elec[,1] #use countries as row names
+use_renew_elec <- use_renew_elec[,-1] #first column is now useless
 
-use_renew_elec=use_renew_elec[!use_renew_elec[,16]==':',]
-View(use_renew_elec)
+use_renew_elec <- use_renew_elec[!use_renew_elec[,16]==':',]
+# View(use_renew_elec)
 
 use_renew_elec[] <- lapply(use_renew_elec, as.numeric) #convert to numeric
 
@@ -137,97 +699,135 @@ rownames(use_renew_elec)[which.max(use_renew_elec[4:40,16])+3] #first three rows
 ```
 Construct dataset with percentages of electricity coming from renewables
 ```{r}
-elec_percentage=tot_elec
+elec_percentage <- tot_elec
 
 for (j in 1:16){
-  elec_percentage[,j]=use_renew_elec[-34,j]/elec_percentage[,j]
+  elec_percentage[,j] <- use_renew_elec[-34,j]/elec_percentage[,j]
   #34th row is Montenegro, which didn't survive preprocessing in the total electricity production dataset
 }
-View(elec_percentage)
+# View(elec_percentage)
 ```
 
 EU's percentage evolution
+
 ```{r}
-x=as.numeric(colnames(elec_percentage))
+x <- as.numeric(colnames(elec_percentage))
 plot(x,as.numeric(elec_percentage[2,]),main="Percentage of electricity coming from renewable sources - EU",xlab="Year",ylab="Percentage",type="l")
 points(x,as.numeric(elec_percentage[2,]),col="Green",lwd=3)
 ```
 
 
+### MANOVA to compare the distributions from the three main types of RE for electricity consumption
 
 Let's make a test to see if the three main renewable resources have the same distribution
 (MANOVA)
 
 ```{r}
-use_hydro_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=2)
-use_wind_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=4)
-use_solar_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=6)
+use_hydro_elec <-read.xlsx('data/use_renew_elec.xlsx',sheet=2)
+use_wind_elec <- read.xlsx('data/use_renew_elec.xlsx',sheet=4)
+use_solar_elec <- read.xlsx('data/use_renew_elec.xlsx',sheet=6)
 
 #clean hydro
-use_hydro_elec=use_hydro_elec[7:48,]
-colnames(use_hydro_elec)=use_hydro_elec[1,]
-use_hydro_elec=use_hydro_elec[-1,]
-rownames(use_hydro_elec)=use_hydro_elec[,1]
-use_hydro_elec=use_hydro_elec[,-1]
+use_hydro_elec <- use_hydro_elec[7:48,]
+colnames(use_hydro_elec) <- use_hydro_elec[1,]
+use_hydro_elec <- use_hydro_elec[-1,]
+rownames(use_hydro_elec) <- use_hydro_elec[,1]
+use_hydro_elec <- use_hydro_elec[,-1]
 
-use_hydro_elec=use_hydro_elec[!use_hydro_elec[,16]==':',]
+use_hydro_elec <- use_hydro_elec[!use_hydro_elec[,16]==':',]
 
 #clean wind
-use_wind_elec=use_wind_elec[7:48,]
-colnames(use_wind_elec)=use_wind_elec[1,]
-use_wind_elec=use_wind_elec[-1,]
-rownames(use_wind_elec)=use_wind_elec[,1]
-use_wind_elec=use_wind_elec[,-1]
+use_wind_elec <- use_wind_elec[7:48,]
+colnames(use_wind_elec) <- use_wind_elec[1,]
+use_wind_elec <- use_wind_elec[-1,]
+rownames(use_wind_elec) <- use_wind_elec[,1]
+use_wind_elec <- use_wind_elec[,-1]
 
-use_wind_elec=use_wind_elec[!use_wind_elec[,16]==':',]
+use_wind_elec <- use_wind_elec[!use_wind_elec[,16]==':',]
 
 #clean solar
-use_solar_elec=use_solar_elec[7:48,]
-colnames(use_solar_elec)=use_solar_elec[1,]
-use_solar_elec=use_solar_elec[-1,]
-rownames(use_solar_elec)=use_solar_elec[,1]
-use_solar_elec=use_solar_elec[,-1]
+use_solar_elec <- use_solar_elec[7:48,]
+colnames(use_solar_elec) <- use_solar_elec[1,]
+use_solar_elec <- use_solar_elec[-1,]
+rownames(use_solar_elec) <- use_solar_elec[,1]
+use_solar_elec <- use_solar_elec[,-1]
 
-use_solar_elec=use_solar_elec[!use_solar_elec[,16]==':',]
+use_solar_elec <- use_solar_elec[!use_solar_elec[,16]==':',]
 
 use_hydro_elec[] <- lapply(use_hydro_elec, as.numeric)
 use_wind_elec[] <- lapply(use_wind_elec, as.numeric)
 use_solar_elec[] <- lapply(use_solar_elec, as.numeric)
 
 
-use_principal=rbind(use_hydro_elec[4:40,],use_wind_elec[4:40,],use_solar_elec[4:40,])
+use_principal <- rbind(use_hydro_elec[4:40,],use_wind_elec[4:40,],use_solar_elec[4:40,])
 
 #factor vector
-source=c(rep("Hydro",37),rep("Wind",37),rep("Solar",37))
-source=factor(source)
+source <- c(rep("Hydro",37),rep("Wind",37),rep("Solar",37))
+source <- factor(source)
 ```
 
-plot trends
+Obtain differences year to year from these datasets, as done before:
+
+```{r}
+
+tot_elec.diff        <- tot_elec[,-length(tot_elec)] - tot_elec[,-1]
+colnames(tot_elec.diff) <- seq(2005,2019)
+
+use_renew_elec.diff  <- use_renew_elec[,-length(use_renew_elec)] - use_renew_elec[,-1] 
+colnames(use_renew_elec.diff) <- seq(2005,2019)
+
+elec_percentage.diff <- elec_percentage[,-length(elec_percentage)] - elec_percentage[,-1]
+colnames(elec_percentage.diff) <- seq(2005,2019)
+
+use_hydro_elec.diff  <- use_hydro_elec[,-length(use_hydro_elec)] - use_hydro_elec[,-1]
+use_solar_elec.diff  <- use_hydro_elec[,-length(use_hydro_elec)] - use_hydro_elec[,-1]
+use_wind_elec.diff   <- use_hydro_elec[,-length(use_hydro_elec)] - use_hydro_elec[,-1]
+colnames(use_hydro_elec.diff) <- seq(2005,2019)
+colnames(use_solar_elec.diff) <- seq(2005,2019)
+colnames(use_wind_elec.diff) <- seq(2005,2019)
+
+use_principal.diff   <- rbind(use_hydro_elec.diff[4:40,], use_wind_elec.diff[4:40,],use_solar_elec.diff[4:40,])     
+colnames(use_principal.diff) <- seq(2005,2019)
+
+
+```
+
+Plot trends
+
 ```{r}
 matplot(colnames(use_principal),t(use_principal),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from Hydro-Wind-Solar",col=source)
 legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 ```
-Seems like Hydro is uniformly more used than the other two, let's proceed to statistically test this fact
 
+```{r}
+matplot(colnames(use_principal.diff),t(use_principal.diff),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from Hydro-Wind-Solar",col=source)
+legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
+```
+
+
+Seems like Hydro is uniformly more used than the other two, let's proceed to statistically test this fact
 
 Observed statistic:
 ```{r}
-fit <- manova(as.matrix(use_principal) ~ source)
-summary.manova(fit,test="Wilks") 
+#REVIEW
+fit <- manova(as.matrix(use_principal.diff) ~ source)
+print(summary.manova(fit,test="Wilks")) 
 T0 <- -summary.manova(fit,test="Wilks")$stats[1,2]
 T0
 ```
+
 Run the test
+
 ```{r}
 set.seed(seed)
 T_stat <- numeric(B)
-n=dim(use_principal)[1]
+n=dim(use_principal.diff)[1]
 
 for(perm in 1:B){
   # choose random permutation
   permutation <- sample(1:n)
   source.perm <- source[permutation]
-  fit.perm <- manova(as.matrix(use_principal) ~ source.perm)
+  fit.perm <- manova(as.matrix(use_principal.diff) ~ source.perm)
   T_stat[perm] <- -summary.manova(fit.perm,test="Wilks")$stats[1,2]
 }
 
@@ -241,6 +841,7 @@ abline(v=T0,col=3,lwd=4)
 p_val <- sum(T_stat>=T0)/B
 p_val
 ```
+
 So here we have statistical evidence that the three main renewable sources have not the same distribution in terms of total generated electricity.
 
 We can further investigate whether Solar and Wind are equally distributed (i.e. developing at the same rate) or not.
@@ -248,13 +849,189 @@ We can further investigate whether Solar and Wind are equally distributed (i.e. 
 We'll exploit local testing of this hypothesis, to (in case of rejection) directly obtain the time instant in which the developments are different
 
 ```{r}
-library(fdatest)
-
-loc_test=IWT2(as.matrix(use_solar_elec),as.matrix(use_wind_elec))
+#REVIEW
+loc_test=IWT2(as.matrix(use_solar_elec.diff),as.matrix(use_wind_elec.diff))
 plot(loc_test,main="Solar and Wind",col=c(2,3))
 ```
 
 
+### Conformal prediction on types of RE for electricity production 
+
+The three conformal models will be:
+    - derive DIFF_SOLAR ~ DIFF_GDP + DIFF_POPULATION
+    - derive DIFF_WIND ~ DIFF_GDP + DIFF_POPULATION
+    - derive DIFF_HIDRO ~ DIFF_GDP + DIFF_POPULATION
+    
+For this purpose, we will first have to import the SSP data from our dataset, which was obtained by retrieving the year to year values from the original data (more details in "src/preprocessing_SSP.Rmd").
+We will also calculate the differences year to year.
+
+```{r}
+gdp <- read.xlsx("data/ssp_iiasa_YtY_gdp.xlsx", 1)
+pop <- read.xlsx("data/ssp_iiasa_YtY_pop.xlsx", 1)
+
+gdp.diff <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
+pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
+
+rownames(gdp.diff) <- gdp$REGION
+rownames(pop.diff) <- pop$REGION
+
+gdp.diff <- gdp.diff[,-length(gdp.diff)] - gdp.diff[,-1]
+pop.diff <- pop.diff[,-length(pop.diff)] - pop.diff[,-1]
+
+colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
+colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
+
+```
+
+```{r}
+# Not in SSP GDP data and in electricity data
+discard.idx <- rownames(use_solar_elec.diff[-c(1,2,3),])%in%rownames(gdp.diff)
+discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
+
+# We discard the countries which are not going to be used, as well as the EU totals 
+use_solar_elec.diff.c <- use_solar_elec.diff[c(F,F,F,discard.idx),]
+use_wind_elec.diff.c <- use_wind_elec.diff[c(F,F,F,discard.idx),]
+use_hydro_elec.diff.c <- use_hydro_elec.diff[c(F,F,F,discard.idx),]
+
+pop.diff <- pop.diff[discard.pop.idx,]
+
+# Not in SSP GDP data and in electricity data
+discard.gdp.idx <- rownames(gdp.diff)%in%rownames(use_solar_elec.diff.c)
+discard.pop.idx <- rownames(pop.diff)%in%rownames(use_solar_elec.diff.c)
+
+gdp.diff <- gdp.diff[discard.gdp.idx,]
+pop.diff <- pop.diff[discard.pop.idx,]
+
+
+rn <- rownames(gdp.diff)
+gdp.diff <- gdp.diff[rn,]
+pop.diff <- pop.diff[rn,]
+
+use_solar_elec.diff.c <- use_solar_elec.diff.c[rn,]
+use_wind_elec.diff.c <- use_solar_elec.diff.c[rn,]
+use_hydro_elec.diff.c <- use_solar_elec.diff.c[rn,]
+
+
+```
+
+Montenegro and Albania should be discarded as they have NaN values or no information available for either population or GDP (see "preprocessing_SSP.Rmd"). Kosovo should be discarded as it is not recognized by the SSP predictions.
+
+```{r}
+
+gdp.elec.train <- gdp.diff[,as.character(seq(2005,2019))]
+pop.elec.train <- pop.diff[,as.character(seq(2005,2019))]
+
+gdp.elec.pred  <- gdp.diff[,as.character(seq(2020,2030))]
+pop.elec.pred  <- pop.diff[,as.character(seq(2020,2030))]
+
+```
+
+REVIEW: Create dummy variables for countries
+
+```{r}
+dummy.country <- seq(1,dim(gdp.diff)[1])
+
+vec_train <- cbind(gdp.elec.train[,1], pop.elec.train[,1], dummy.country)
+for (j in 2:15){
+    v <- cbind(gdp.elec.train[,j], pop.elec.train[,j], dummy.country)
+    vec_train <- rbind(vec_train,v)
+}
+vec_train <- data.frame(vec_train)
+colnames(vec_train) <- c("gdp","pop","country")
+
+
+vec_test <- cbind(gdp.elec.pred[,1], pop.elec.pred[,1], dummy.country)
+for (j in 2:11){
+    v <- cbind(gdp.elec.pred[,j], pop.elec.pred[,j], dummy.country)
+    vec_test <- rbind(vec_test,v)
+}
+vec_test <- data.frame(vec_test)
+colnames(vec_test) <- c("gdp","pop","country")
+
+
+vec_solar <- gather(use_solar_elec.diff.c,year,y)[,-1]
+vec_hydro <- gather(use_hydro_elec.diff.c,year,y)[,-1]
+vec_wind <- gather(use_wind_elec.diff.c,year,y)[,-1]
+```
+
+
+```{r}
+
+train_gam <- function(x,y,out=NULL){
+    colnames(x)=c("gdp", "pop", "country")
+    train_data=data.frame(y,x)
+    model_gam=gam(y ~ s(gdp,country,bs='re') + s(pop,country,bs='re'), data=train_data)
+}
+
+
+predict_gam <- function(obj, new_x){
+    new_x=data.frame(new_x)
+    colnames(new_x)=c("gdp", "pop", "country")
+    predict.gam(obj,new_x)
+}
+
+```
+
+
+```{r}
+
+c_preds.solar <- conformal.pred(
+    vec_train, 
+    vec_solar,
+    as.matrix(vec_test),
+    alpha=0.05, 
+    verbose=T, 
+    train.fun = train_gam, 
+    predict.fun = predict_gam)
+
+c_preds.hydro <- conformal.pred(
+    vec_train, 
+    vec_hydro,
+    as.matrix(vec_test),
+    alpha=0.05, 
+    verbose=T, 
+    train.fun = train_gam, 
+    predict.fun = predict_gam)
+
+c_preds.wind <- conformal.pred(
+    vec_train, 
+    vec_wind,
+    as.matrix(vec_test),
+    alpha=0.05, 
+    verbose=T, 
+    train.fun = train_gam, 
+    predict.fun = predict_gam)
+
+c_preds_solar
+```
+
+Plot predictions 2020-2030:
+```{r}
+with(data.frame(vec_solar=vec_solar, year=seq(2005,2019)), plot(year, vec_solar, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Solar Electricity Use'))
+
+lines(rep(seq(2020,2030),34),c_preds.solar$pred,lwd =2, col ="green",lty=3)
+matlines(rep(seq(2020,2030),34),c_preds.solar$up,lwd =1, col =" blue",lty =3)
+matlines(rep(seq(2020,2030),34),c_preds.solar$lo, lwd =1, col =" blue",lty =3)
+```
+```{r}
+with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use'))
+
+lines(rep(seq(2020,2030),34),c_preds.wind$pred,lwd =2, col ="green",lty=3)
+matlines(rep(seq(2020,2030),34),c_preds.wind$up,lwd =1, col =" blue",lty =3)
+matlines(rep(seq(2020,2030),34),c_preds.wind$lo, lwd =1, col =" blue",lty =3)
+```
+```{r}
+with(data.frame(vec_hydro=vec_hydro, year=seq(2005,2019)), plot(year, vec_hydro, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use'))
+
+lines(rep(seq(2020,2030),34),c_preds.hydro$pred,lwd =2, col ="green",lty=3)
+matlines(rep(seq(2020,2030),34),c_preds.hydro$up,lwd =1, col =" blue",lty =3)
+matlines(rep(seq(2020,2030),34),c_preds.hydro$lo, lwd =1, col =" blue",lty =3)
+```
+
+
+## 3. Analysis of EU's current day renewable energy network.
+
+### Regression on european electricity capacity
 
 Let's make a step regression on total European values
 
@@ -366,593 +1143,7 @@ matlines(dat$year, se.bands ,lwd =1, col =" blue",lty =3)
 ```
 
 
-
-```{r}
-library(jsonlite)
-
-list_vec=flatten(use_wind_elec[4:40,])
-vec_wind=cbind(list_vec[[1]],rep(2004,37))
-for (j in 2:16){
-  v=cbind(list_vec[[j]],rep(2004+j-1,37))
-  vec_wind=rbind(vec_wind,v)
-}
-vec_wind=data.frame(vec_wind)
-colnames(vec_wind)=c("value_wind","year")
-```
-
-
-```{r}
-model_poly_wind=with(vec_wind,lm(value_wind ~ poly(year,degree=2)))
-year.grid=seq(range(vec_wind$year)[1],2024,by=0.1)
-
-preds=predict(model_poly_wind,list(year=year.grid),se=T)
-
-
-```
-
-```{r}
-lm_train=lm.funs(intercept = T)$train.fun
-lm_predict=lm.funs(intercept = T)$predict.fun
-
-design_matrix=matrix(poly(vec_wind$year,degree=2),ncol=2)
-pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_wind$year,degree=2),"coefs") ),ncol=2)
-
-c_preds_wind=conformal.pred(design_matrix,vec_wind$value_wind,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
-
-with(vec_wind, plot(year ,value_wind ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Wind'))
-lines(year.grid,preds$fit ,lwd =2, col =" green")
-lines(year.grid,c_preds_wind$pred ,lwd =2, col ="red",lty=3)
-lines(year.grid,numeric(length(year.grid)),lwd=1,col="green",lty=3)
-matlines(year.grid ,c_preds_wind$up ,lwd =1, col =" green",lty =3)
-```
-```{r}
-list_vec=flatten(use_solar_elec[4:40,])
-vec_solar=cbind(list_vec[[1]],rep(2004,37))
-for (j in 2:16){
-  v=cbind(list_vec[[j]],rep(2004+j-1,37))
-  vec_solar=rbind(vec_solar,v)
-}
-vec_solar=data.frame(vec_solar)
-colnames(vec_solar)=c("value_solar","year")
-```
-
-
-```{r}
-model_poly_solar=with(vec_solar,lm(value_solar ~ poly(year,degree=2)))
-year.grid=seq(range(vec_solar$year)[1],2024,by=0.1)
-
-preds=predict(model_poly_solar,list(year=year.grid),se=T)
-
-
-```
-
-```{r}
-lm_train=lm.funs(intercept = T)$train.fun
-lm_predict=lm.funs(intercept = T)$predict.fun
-
-design_matrix=matrix(poly(vec_solar$year,degree=2),ncol=2)
-pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_solar$year,degree=2),"coefs") ),ncol=2)
-
-c_preds_solar=conformal.pred(design_matrix,vec_solar$value_solar,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
-
-with(vec_solar, plot(year ,value_solar ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Solar'))
-lines(year.grid,preds$fit ,lwd =2, col =" red")
-lines(year.grid,c_preds_solar$pred ,lwd =2, col ="blue",lty=3)
-lines(year.grid,numeric(length(year.grid)),lwd=1,col="red",lty=3)
-matlines(year.grid ,c_preds_solar$up ,lwd =1, col ="red",lty =3)
-```
-```{r}
-list_vec=flatten(use_hydro_elec[4:40,])
-vec_hydro=cbind(list_vec[[1]],rep(2004,37))
-for (j in 2:16){
-  v=cbind(list_vec[[j]],rep(2004+j-1,37))
-  vec_hydro=rbind(vec_hydro,v)
-}
-vec_hydro=data.frame(vec_hydro)
-colnames(vec_hydro)=c("value_hydro","year")
-```
-
-
-```{r}
-model_poly_hydro=with(vec_hydro,lm(value_hydro ~ poly(year,degree=2)))
-year.grid=seq(range(vec_hydro$year)[1],2024,by=0.1)
-
-preds=predict(model_poly_hydro,list(year=year.grid),se=T)
-
-
-```
-
-```{r}
-lm_train=lm.funs(intercept = T)$train.fun
-lm_predict=lm.funs(intercept = T)$predict.fun
-
-design_matrix=matrix(poly(vec_hydro$year,degree=2),ncol=2)
-pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_hydro$year,degree=2),"coefs") ),ncol=2)
-
-c_preds_hydro=conformal.pred(design_matrix,vec_hydro$value_hydro,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
-
-with(vec_hydro, plot(year ,value_hydro ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Hydro'))
-lines(year.grid,preds$fit ,lwd =2, col =" blue")
-lines(year.grid,c_preds_hydro$pred ,lwd =2, col ="green",lty=3)
-lines(year.grid,numeric(length(year.grid)),lwd=1,col="blue",lty=3)
-matlines(year.grid ,c_preds_hydro$up ,lwd =1, col =" blue",lty =3)
-```
-```{r}
-year.grid.ours=year.grid[year.grid<=2019.0]
-plot(year.grid,c_preds_hydro$pred,type="l",xlab="Year",ylab="Gigawatt-hour",main="Electricity production conformal predictions",ylim=c(0,25000),col="blue",lty=2)
-lines(year.grid,c_preds_solar$pred,col="red",lty=2)
-lines(year.grid,c_preds_wind$pred,col="green",lty=2)
-
-lines(year.grid.ours,c_preds_solar$pred[1:length(year.grid.ours)],col="red",lwd=2)
-lines(year.grid.ours,c_preds_wind$pred[1:length(year.grid.ours)],col="green",lwd=2)
-lines(year.grid.ours,c_preds_hydro$pred[1:length(year.grid.ours)],col="blue",lwd=2)
-abline(v=2019,col="black",lty=3)
-legend("topleft",legend=c("Hydro","Solar","Wind"),col=c("blue","red","green"),pch=1)
-```
-
-
-Same thing with splines
-```{r}
-br=quantile(vec_wind$year,probs = c(0.2,0.4,0.6,0.8))
-
-model_splines_wind <-
-  lm(value_wind ~ ns(year,knots = br), data = vec_wind)
-
-preds=predict(model_splines_wind,list(year=year.grid),se=T)
-
-lm_train=lm.funs(intercept = T)$train.fun
-lm_predict=lm.funs(intercept = T)$predict.fun
-
-design_matrix=ns(vec_wind$year, knots=br)
-pred_grid=matrix(ns(year.grid,knots = br),nrow=length(year.grid))
-
-c_preds=conformal.pred(design_matrix,vec_wind$value_wind,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
-
-with(vec_wind, plot(year ,value_wind ,xlim=range(year.grid) ,cex =.5, col =" darkgrey ",main="Natural splines prediction"))
-lines(year.grid,preds$fit ,lwd =2, col =" blue")
-lines(year.grid,c_preds$pred ,lwd =2, col ="red",lty=3)
-matlines(year.grid ,cbind(c_preds$up,c_preds$lo) ,lwd =1, col =" blue",lty =3)
-
-
-```
-Smoothing splines?
-```{r}
-fit=smooth.spline(vec_wind$year,vec_wind$value_wind,cv=T)
-
-opt = fit$df
-opt
-fit$lambda
-
-train_ss=function(x,y,out=NULL){
-  smooth.spline(x,y,df=opt)
-}
-
-predict_ss=function(obj, new_x){
-  predict(obj,new_x)$y
-}
-
-green=train_ss(vec_wind$year,vec_wind$value_wind)
-
-#predict_ss(green,vec_wind$year)
-```
-
-```{r}
-c_preds=conformal.pred(vec_wind$year,vec_wind$value_wind,year.grid,alpha=0.05,verbose=T,train.fun = train_ss ,predict.fun = predict_ss,num.grid.pts = 200)
-
-plot(vec_wind$year ,vec_wind$value_wind,cex =.5, col =" darkgrey ",xlim=range(year))
-lines(fit,col="blue",lwd=2)
-lines(year.grid,c_preds$pred ,lwd =2, col ="red",lty=3)
-matlines(year.grid ,cbind(c_preds$up,c_preds$lo) ,lwd =1, col =" blue",lty =3)
-
-```
-
-
-
-
-
-Import datasets about electricity network capacity
-
-Total capacity:
-```{r}
-total_capacity=read.xlsx('production_capacities_by_fuel.xlsx',sheet=1)
-#View(total_capacity)
-total_capacity=total_capacity[7:51,]    #quit useless rows
-colnames(total_capacity)=total_capacity[1,] #use years as columns names
-total_capacity=total_capacity[-1,] #first row now is useless
-rownames(total_capacity)=total_capacity[,1] #use countries as row names
-total_capacity=total_capacity[,-1] #first column is now useless
-
-total_capacity=total_capacity[!total_capacity[,1]==':',]
-View(total_capacity)
-total_capacity[] <- lapply(total_capacity, as.numeric)
-
-matplot(colnames(total_capacity),t(total_capacity[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Total electricity capacity")
-```
-
-
-Combustible fuels:
-```{r}
-capacity_comb_fuels=read.xlsx('production_capacities_by_fuel.xlsx',sheet=2)
-View(capacity_comb_fuels)
-```
-
-```{r}
-capacity_comb_fuels=capacity_comb_fuels[7:51,]    #quit useless rows
-colnames(capacity_comb_fuels)=capacity_comb_fuels[1,] #use years as columns names
-capacity_comb_fuels=capacity_comb_fuels[-1,] #first row now is useless
-rownames(capacity_comb_fuels)=capacity_comb_fuels[,1] #use countries as row names
-capacity_comb_fuels=capacity_comb_fuels[,-1] #first column is now useless
-```
-
-
-```{r}
-capacity_comb_fuels=capacity_comb_fuels[!capacity_comb_fuels[,1]==':',]
-View(capacity_comb_fuels)
-capacity_comb_fuels[] <- lapply(capacity_comb_fuels, as.numeric)
-
-no_total_cf=capacity_comb_fuels[4:38,] #first three rows are total european statistics
-```
-
-
-```{r}
-matplot(colnames(no_total_cf),t(no_total_cf),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacity from combustible fuels")
-```
-
-```{r}
-rownames(no_total_cf)[which.max(no_total_cf[,30])] 
-```
-Now for renewables we are going to sum all the capacities from all the (renewable) fuels
-
-7th dataframe contains nucelar energy, we have to decide whether include it or not!!!
-```{r}
-capacity_renew_fuels_1=read.xlsx('production_capacities_by_fuel.xlsx',sheet=3)
-capacity_renew_fuels_2=read.xlsx('production_capacities_by_fuel.xlsx',sheet=4)
-capacity_renew_fuels_3=read.xlsx('production_capacities_by_fuel.xlsx',sheet=5)
-capacity_renew_fuels_4=read.xlsx('production_capacities_by_fuel.xlsx',sheet=6)
-capacity_renew_fuels_5=read.xlsx('production_capacities_by_fuel.xlsx',sheet=7)
-capacity_renew_fuels_6=read.xlsx('production_capacities_by_fuel.xlsx',sheet=8)
-capacity_renew_fuels_7=read.xlsx('production_capacities_by_fuel.xlsx',sheet=9) #nuclear
-
-View(capacity_renew_fuels_1)
-```
-
-```{r}
-capacity_renew_fuels_1=capacity_renew_fuels_1[7:51,]    #quit useless rows
-colnames(capacity_renew_fuels_1)=capacity_renew_fuels_1[1,] #use years as columns names
-capacity_renew_fuels_1=capacity_renew_fuels_1[-1,] #first row now is useless
-rownames(capacity_renew_fuels_1)=capacity_renew_fuels_1[,1] #use countries as row names
-capacity_renew_fuels_1=capacity_renew_fuels_1[,-1] #first column is now useless
-
-capacity_renew_fuels_2=capacity_renew_fuels_2[7:51,]    #quit useless rows
-colnames(capacity_renew_fuels_2)=capacity_renew_fuels_2[1,] #use years as columns names
-capacity_renew_fuels_2=capacity_renew_fuels_2[-1,] #first row now is useless
-rownames(capacity_renew_fuels_2)=capacity_renew_fuels_2[,1] #use countries as row names
-capacity_renew_fuels_2=capacity_renew_fuels_2[,-1] #first column is now useless
-
-capacity_renew_fuels_3=capacity_renew_fuels_3[7:51,]    #quit useless rows
-colnames(capacity_renew_fuels_3)=capacity_renew_fuels_3[1,] #use years as columns names
-capacity_renew_fuels_3=capacity_renew_fuels_3[-1,] #first row now is useless
-rownames(capacity_renew_fuels_3)=capacity_renew_fuels_3[,1] #use countries as row names
-capacity_renew_fuels_3=capacity_renew_fuels_3[,-1] #first column is now useless
-
-capacity_renew_fuels_4=capacity_renew_fuels_4[7:51,]    #quit useless rows
-colnames(capacity_renew_fuels_4)=capacity_renew_fuels_4[1,] #use years as columns names
-capacity_renew_fuels_4=capacity_renew_fuels_4[-1,] #first row now is useless
-rownames(capacity_renew_fuels_4)=capacity_renew_fuels_4[,1] #use countries as row names
-capacity_renew_fuels_4=capacity_renew_fuels_4[,-1] #first column is now useless
-
-capacity_renew_fuels_5=capacity_renew_fuels_5[7:51,]    #quit useless rows
-colnames(capacity_renew_fuels_5)=capacity_renew_fuels_5[1,] #use years as columns names
-capacity_renew_fuels_5=capacity_renew_fuels_5[-1,] #first row now is useless
-rownames(capacity_renew_fuels_5)=capacity_renew_fuels_5[,1] #use countries as row names
-capacity_renew_fuels_5=capacity_renew_fuels_5[,-1] #first column is now useless
-
-capacity_renew_fuels_6=capacity_renew_fuels_6[7:51,]    #quit useless rows
-colnames(capacity_renew_fuels_6)=capacity_renew_fuels_6[1,] #use years as columns names
-capacity_renew_fuels_6=capacity_renew_fuels_6[-1,] #first row now is useless
-rownames(capacity_renew_fuels_6)=capacity_renew_fuels_6[,1] #use countries as row names
-capacity_renew_fuels_6=capacity_renew_fuels_6[,-1] #first column is now useless
-
-
-capacity_renew_fuels_7=capacity_renew_fuels_7[7:51,]    #quit useless rows
-colnames(capacity_renew_fuels_7)=capacity_renew_fuels_7[1,] #use years as columns names
-capacity_renew_fuels_7=capacity_renew_fuels_7[-1,] #first row now is useless
-rownames(capacity_renew_fuels_7)=capacity_renew_fuels_7[,1] #use countries as row names
-capacity_renew_fuels_7=capacity_renew_fuels_7[,-1] #first column is now useless
-
-capacity_renew_fuels_1=capacity_renew_fuels_1[!capacity_renew_fuels_1[,1]==':',]
-capacity_renew_fuels_2=capacity_renew_fuels_2[!capacity_renew_fuels_2[,1]==':',]
-capacity_renew_fuels_3=capacity_renew_fuels_3[!capacity_renew_fuels_3[,1]==':',]
-capacity_renew_fuels_4=capacity_renew_fuels_4[!capacity_renew_fuels_4[,1]==':',]
-capacity_renew_fuels_5=capacity_renew_fuels_5[!capacity_renew_fuels_5[,1]==':',]
-capacity_renew_fuels_6=capacity_renew_fuels_6[!capacity_renew_fuels_6[,1]==':',]
-capacity_renew_fuels_7=capacity_renew_fuels_7[!capacity_renew_fuels_7[,1]==':',]
-View(capacity_renew_fuels_1)
-```
-
-
-```{r}
-capacity_renew_fuels_no_nuclear=capacity_renew_fuels_1
-
-for (j in 1:30){
-   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_2[,j])
-}
-
-for (j in 1:30){
-   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_3[,j])
-}
-for (j in 1:30){
-   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_4[,j])
-}
-for (j in 1:30){
-   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_5[,j])
-}
-for (j in 1:30){
-   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_6[,j])
-}
-
-```
-
-```{r}
-capacity_renew_fuels_nuclear=capacity_renew_fuels_no_nuclear
-for (j in 1:30){
-   capacity_renew_fuels_nuclear[,j]=as.numeric(capacity_renew_fuels_nuclear[,j])+
-                                    as.numeric(capacity_renew_fuels_7[,j])
-}
-```
-
-
-```{r}
-no_total_no_nuclear=capacity_renew_fuels_no_nuclear[4:38,]
-
-
-matplot(colnames(no_total_no_nuclear),t(no_total_no_nuclear),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (no nuclear)")
-```
-Let's compute the median curve and plot it
-```{r}
-band_depth <- BD(Data = no_total_no_nuclear)
-modified_band_depth <- MBD(Data = no_total_no_nuclear)
-
-#median_curve <- median_fData(fData = capacity_renew_fuels_no_nuclear, type = "MBD")
-
-median_curve_manual <- no_total_no_nuclear[which.max(modified_band_depth),]
-
-matplot(colnames(capacity_renew_fuels_no_nuclear),t(no_total_no_nuclear),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (no nuclear)")
-lines(colnames(capacity_renew_fuels_no_nuclear),median_curve_manual,col="red",lwd=5)
-```
-
-```{r}
-rownames(no_total_no_nuclear)[which.max(no_total_no_nuclear[,30])]
-```
-
-Trying to detect outliers but can't manage to make it work
-```{r}
-#invisible(fbplot(fdata(capacity_renew_fuels_no_nuclear[4:38,])[[1]]
-#                 , main="Magnitude outliers"))
-#invisible(outliergram(fdata(capacity_renew_fuels_no_nuclear[4:38,])[[1]]))
-```
-
-
-Trying to perform some tests on electricity capacities (non renewables vs renewables: do they have the same distribution?)
-Two population multivariate test
-```{r}
-B = 10000
-seed = 26
-
-cf.mean = colMeans(no_total_cf) #combustible fuels
-ren.mean = colMeans(no_total_no_nuclear) #renewables
-years=as.numeric(colnames(capacity_comb_fuels)) #years from 1990 to 2019
-
-matplot(years,t(rbind(cf.mean,ren.mean)), type='l', col=c("red","green"), lty=1,xlab="Year",ylab="Megawatt",main="Mean production capacity")
-
-```
-Let's compute the test statistics
-```{r}
-n1 = dim(no_total_cf)[1]
-n2 = dim(no_total_no_nuclear)[1]
-n  = n1 + n2
-
-T20 = as.numeric((cf.mean-ren.mean) %*% (cf.mean-ren.mean))
-T20
-
-# Estimating the permutational distribution under H0
-
-T2 = numeric(B)
-set.seed(seed)
-t_pooled = rbind(no_total_cf,no_total_no_nuclear)
-
-for(perm in 1:B){
-  # Random permutation of indexes
-  permutation = sample(n)
-  t_perm = t_pooled[permutation,]
-  t1_perm = t_perm[1:n1,]
-  t2_perm = t_perm[(n1+1):n,]
-  
-  # Evaluation of the test statistic on permuted data
-  t1.mean_perm = colMeans(t1_perm)
-  t2.mean_perm = colMeans(t2_perm)
-  T2[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
-}
-```
-```{r}
-hist(T2,xlim=range(c(T2,T20)))
-abline(v=T20,col=3,lwd=4)
-
-plot(ecdf(T2))
-abline(v=T20,col=3,lwd=4)
-```
-P-value:
-```{r}
-p_val = sum(T2>=T20)/B
-p_val
-```
-In this case we don't have statistical evidence to reject the null hypotesis of equal distributions
-
-
-
-Now let's make a nonparametric regression to compare trends of renewable vs non renewable electricity capacity in all European Union
-
-```{r}
-plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-```
-
-```{r}
-m_list=lapply(1:10,function(degree){lm(as.numeric(capacity_comb_fuels[2,]) ~ poly(as.numeric(years),degree=degree))})
-do.call(anova,m_list)
-```
-
-```{r}
-summary(m_list[[2]])
-```
-
-```{r}
-summary(m_list[[3]])
-
-```
-
-```{r}
-summary(m_list[[6]])
-
-```
-
-```{r}
-plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-lines(years,m_list[[2]]$fitted.values,col="red")
-
-```
-```{r}
-plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-lines(years,m_list[[3]]$fitted.values,col="red")
-```
-```{r}
-plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-lines(years,m_list[[6]]$fitted.values,col="red")
-```
-Third grade polynomial regression seems reasonable (theorethically we should choose grade 9, since it's the last significant model: 10th grade regression is non significant)
-```{r}
-comb_model=m_list[[3]]
-```
-
-
-
-Now let's move to renewables
-```{r}
-plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-```
-
-```{r}
-m_list=lapply(1:10,function(degree){lm(as.numeric(capacity_renew_fuels_no_nuclear[2,]) ~ poly(as.numeric(years),degree=degree))})
-do.call(anova,m_list)
-```
-```{r}
-summary(m_list[[2]])
-
-```
-```{r}
-summary(m_list[[4]])
-
-```
-```{r}
-summary(m_list[[7]])
-
-```
-```{r}
-plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-lines(years,m_list[[2]]$fitted.values,col="green")
-```
-```{r}
-plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-lines(years,m_list[[4]]$fitted.values,col="green")
-```
-
-```{r}
-plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
-lines(years,m_list[[7]]$fitted.values,col="green")
-```
-Since by passing to fourth grade we only add one parameter w.r.t second grade (third grade coefficient is considered zero), we can consider the fourth grade regression.
-
-But we can notice that the coefficient of fourth grade is negative! It's not really reasonable for future predictions, so we stick to second grade
-
-
-```{r}
-ren_model=m_list[[2]]
-```
-
-```{r}
-anni=seq(range(years)[1],range(years)[2],by=0.25)
-preds=predict(comb_model,list(years=anni),se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni), ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+5000,cex =.5, col =" darkgrey ",main='Degree 3 poly combustible, degree 4 poly renewables',xlab="Year",ylab="Megawatt")
-lines(anni,preds$fit ,lwd =2, col =" red")
-matlines (anni ,se.bands ,lwd =1, col =" red",lty =3)
-
-preds=predict(ren_model,list(years=anni),se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ",pch=2)
-lines(anni,preds$fit ,lwd =2, col =" green")
-matlines (anni ,se.bands ,lwd =1, col =" green",lty =3)
-```
-Let's try with spline regression
-```{r}
-anni=seq(range(years)[1],range(years)[2],by=0.25)
-
-#combustible fuels
-b=data.frame(cap=as.numeric(capacity_comb_fuels[2,]),years_b=years)
-comb_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=b )
-dat_b=data.frame(years_b=anni)
-
-preds=predict(comb_model_spline,dat_b,se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-
-plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni),
-    ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+5000,cex =.5, col =" darkgrey ",
-    main="Splines regression capacity",xlab="Year",ylab="Megawatt")
-
-legend("topleft",legend=c("Non-renewables","Renewables"),col=c(2,3),pch=1)
-
-lines(anni,preds$fit ,lwd =2, col =" red")
-matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
-
-#renewables
-c=data.frame(cap=as.numeric(capacity_renew_fuels_no_nuclear[2,]),years_b=years)
-ren_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=c )
-dat_b=data.frame(years_b=anni)
-
-preds=predict(ren_model_spline,dat_b,se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-
-points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
-lines(anni,preds$fit ,lwd =2, col =" green")
-matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
-```
-
-Natural splines
-```{r}
-comb_model_spline <- lm(cap ~ ns(years_b, df=8), data=b )
-dat_b=data.frame(years_b=anni)
-
-preds=predict(comb_model_spline,dat_b,se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-
-plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni) ,ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+3000,cex =.5, col =" darkgrey ",
-     main="Natural Splines regression on European electricity capacity",xlab="Year",ylab="Megawatt")
-
-legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
-
-lines(anni,preds$fit ,lwd =2, col =" red")
-matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
-
-ren_model_spline <- lm(cap ~ ns(years_b, df=7), data=c )
-dat_b=data.frame(years_b=anni)
-
-preds=predict(ren_model_spline,dat_b,se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-
-points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
-lines(anni,preds$fit ,lwd =2, col =" green")
-matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
-```
-
+### ANOVA test on 2019 capacities, dividing Europe in four regions
 
 Set a region-based analysis of electricity capacity
 
@@ -1153,3 +1344,146 @@ Even if we include nuclear, Germany is still at the top
 ```{r}
 rownames(capacity_renew_fuels_nuclear)[which.max(capacity_renew_fuels_nuclear[4:38,30])+3] #first three rows are total european statistics
 ```
+
+
+
+
+
+
+# Core: Model to predict future european CO2
+
+
+```{r}
+gdp.diff <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
+pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
+
+rownames(gdp.diff) <- gdp$REGION
+rownames(pop.diff) <- pop$REGION
+
+gdp.diff <- gdp.diff[,-length(gdp.diff)] - gdp.diff[,-1]
+pop.diff <- pop.diff[,-length(pop.diff)] - pop.diff[,-1]
+
+colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
+colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
+```
+
+
+```{r}
+# Not in SSP GDP data and in EUstat data
+discard.idx <- rownames(consump.oil.petr.diff[-c(1,2,3),])%in%rownames(gdp.diff)
+discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
+
+# We discard the countries which are not going to be used, as well as the EU totals 
+consump.oil.petr.diff.c <- consump.oil.petr.diff[c(F,F,F,discard.idx),]
+consump.gas.diff.c <- consump.gas.diff[c(F,F,F,discard.idx),]
+consump.fossils.diff.c <- consump.fossils.diff[c(F,F,F,discard.idx),]
+consump.renew.diff.c <- consump.renew.diff[c(F,F,F,discard.idx),]
+
+pop.diff <- pop.diff[discard.pop.idx,]
+
+# Not in SSP GDP data and in EUstat data
+discard.gdp.idx <- rownames(gdp.diff)%in%rownames(consump.oil.petr.diff.c)
+discard.pop.idx <- rownames(pop.diff)%in%rownames(consump.oil.petr.diff.c)
+
+gdp.diff <- gdp.diff[discard.gdp.idx,]
+pop.diff <- pop.diff[discard.pop.idx,]
+
+
+rn <- rownames(gdp.diff)
+gdp.diff <- gdp.diff[rn,]
+pop.diff <- pop.diff[rn,]
+
+consump.oil.petr.diff.c <- consump.oil.petr.diff.c[rn,]
+consump.gas.diff.c <- consump.gas.diff.c[rn,]
+consump.fossils.diff.c <- consump.fossils.diff.c[rn,]
+consump.renew.diff.c <- consump.renew.diff.c[rn,]
+
+```
+
+
+```{r}
+gdp.train <- gdp.diff[,as.character(seq(1991,2019))]
+pop.train <- pop.diff[,as.character(seq(1991,2019))]
+
+gdp.pred  <- gdp.diff[,as.character(seq(2020,2030))]
+pop.pred  <- pop.diff[,as.character(seq(2020,2030))]
+```
+
+
+```{r}
+# REVIEW: take into account country dummy variable??
+
+vec_train <- cbind(gdp.train[,1], pop.elec.train[,1])
+for (j in 2:29){
+    v <- cbind(gdp.train[,j], pop.elec.train[,j])
+    vec_train <- rbind(vec_train,v)
+}
+vec_train <- data.frame(vec_train)
+colnames(vec_train) <- c("gdp","pop")
+
+
+vec_test <- cbind(gdp.elec.pred[,1], pop.elec.pred[,1])
+for (j in 2:11){
+    v <- cbind(gdp.elec.pred[,j], pop.elec.pred[,j])
+    vec_test <- rbind(vec_test,v)
+}
+vec_test <- data.frame(vec_test)
+colnames(vec_test) <- c("gdp","pop")
+
+vec_oil <- gather(consump.oil.petr.diff.c,year,y)[,-1]
+vec_fos <- gather(consump.fossils.diff.c,year,y)[,-1]
+vec_gas <- gather(consump.gas.diff.c,year,y)[,-1]
+
+
+vec_oil.train <- cbind(vec_oil[1:len(vec_train)], vec_train)
+vec_fos.train <- cbind(vec_fos[1:len(vec_train)], vec_train)
+vec_gas.train <- cbind(vec_gas[1:len(vec_train)], vec_train)
+```
+
+
+
+Oil & Petr.
+```{r}
+consump.oil.petr.gam <- gam(value_oil ~ gdp + pop,
+                           data = vec_oil.train) 
+summary(consump.oil.petr.gam)
+
+hist(consump.oil.petr.gam$residuals)
+qqnorm(consump.oil.petr.gam$residuals)
+shapiro.test(consump.oil.petr.gam$residuals)
+```
+
+Fossils:
+```{r}
+consump.fossils.gam <- gam(value_ff ~ gdp + pop,
+                           data = vec_ff.train) 
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
+```
+
+Natural gas:
+```{r}
+consump.gas.gam <- gam(value_ng ~ gdp + pop,
+                           data = vec_ng.train) 
+summary(consump.gas.gam)
+
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
+```
+
+```{r}
+# TODO: Predictions
+```
+
+
+# Robustness
+
+## TODO:
+
+
+
+
