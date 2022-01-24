@@ -1,0 +1,1219 @@
+---
+title: "NPS project"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(openxlsx)
+library(roahd)
+library(rgl)
+library(fda.usc) #install if necessary
+library(np)
+library(splines)
+library(devtools)
+#devtools::install_github(repo="ryantibs/conformal", subdir="conformalInference")
+library(conformalInference)
+
+B=10000
+seed=1234
+```
+
+```{r}
+data_ssp=read.xlsx("data/ssp_iiasa_YtY_gdp.xlsx",sheet=1)
+```
+
+
+```{r}
+nrg_balances=read.xlsx('data/complete_energy_balances.xlsx',sheet=1)
+View(nrg_balances)
+```
+
+```{r}
+nrg_balances=nrg_balances[7:50,]    #quit useless rows
+colnames(nrg_balances)=nrg_balances[1,] #use years as columns names
+nrg_balances=nrg_balances[-1,] #first row now is useless
+rownames(nrg_balances)=nrg_balances[,1] #use countries as row names
+nrg_balances=nrg_balances[,-1] #first column is now useless
+
+```
+
+Let's quit empty values, signaled with the character ":"
+```{r}
+nrg_balances=nrg_balances[!nrg_balances[,1]==':',]
+```
+
+A first plot of total energy consumption
+```{r}
+matplot(colnames(nrg_balances),t(nrg_balances[4:38,]),type='l',xlab="Year",ylab="Thousand tonnes of oil equivalent",main="Total energy consumption")
+```
+
+Percentage of renewable use over total energy
+```{r}
+percentage_renew=read.xlsx('data/percentage_renewables.xlsx')
+View(percentage_renew)
+```
+
+```{r}
+percentage_renew=percentage_renew[6:46,]    #quit useless rows
+colnames(percentage_renew)=percentage_renew[1,] #use years as columns names
+percentage_renew=percentage_renew[-1,] #first row now is useless
+rownames(percentage_renew)=percentage_renew[,1] #use countries as row names
+percentage_renew=percentage_renew[,-1] #first column is now useless
+```
+
+
+```{r}
+percentage_renew=percentage_renew[!percentage_renew[,1]==':',]
+for (j in 1:16){
+  percentage_renew[,j]=as.numeric(percentage_renew[,j])  #convert characters to numeric
+}
+percentage_renew=round(percentage_renew,4)
+View(percentage_renew)
+```
+
+
+```{r}
+matplot(colnames(percentage_renew),t(percentage_renew[4:39,]),type='l',xlab="Year",ylab="Percentage",main="Energy from renewables")
+```
+
+Current leader:
+```{r}
+rownames(percentage_renew)[which.max(percentage_renew[4:39,16])+3]
+```
+
+Countries over 40%:
+```{r}
+rownames(percentage_renew)[which(percentage_renew[4:39,16]>=40.0)+3]
+```
+
+Total electricity production
+```{r}
+tot_elec=read.xlsx('data/total_electricity_use.xlsx')
+View(tot_elec)
+
+tot_elec=tot_elec[7:51,]    #quit useless rows
+colnames(tot_elec)=tot_elec[1,] #use years as columns names
+tot_elec=tot_elec[-1,] #first row now is useless
+rownames(tot_elec)=tot_elec[,1] #use countries as row names
+tot_elec=tot_elec[,c(-1,-18)] #first column is now useless and don't consider 2020
+
+tot_elec=tot_elec[!tot_elec[,1]==':',]
+View(tot_elec)
+
+tot_elec[] <- lapply(tot_elec, as.numeric) #convert to numeric
+
+
+matplot(colnames(tot_elec),t(tot_elec[4:39,]),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity production")
+```
+
+Production of electricity from renewables dataset
+
+```{r}
+use_renew_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=1)
+View(use_renew_elec)
+
+use_renew_elec=use_renew_elec[7:48,]    #quit useless rows
+colnames(use_renew_elec)=use_renew_elec[1,] #use years as columns names
+use_renew_elec=use_renew_elec[-1,] #first row now is useless
+rownames(use_renew_elec)=use_renew_elec[,1] #use countries as row names
+use_renew_elec=use_renew_elec[,-1] #first column is now useless
+
+use_renew_elec=use_renew_elec[!use_renew_elec[,16]==':',]
+View(use_renew_elec)
+
+use_renew_elec[] <- lapply(use_renew_elec, as.numeric) #convert to numeric
+
+
+matplot(colnames(use_renew_elec),t(use_renew_elec[4:40,]),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from renewables")
+
+```
+
+Let's see which country is particularly above the others in total usage of renewables for electricity production
+
+```{r}
+rownames(use_renew_elec)[which.max(use_renew_elec[4:40,16])+3] #first three rows are total european statistics
+```
+Construct dataset with percentages of electricity coming from renewables
+```{r}
+elec_percentage=tot_elec
+
+for (j in 1:16){
+  elec_percentage[,j]=use_renew_elec[-34,j]/elec_percentage[,j]
+  #34th row is Montenegro, which didn't survive preprocessing in the total electricity production dataset
+}
+View(elec_percentage)
+```
+
+EU's percentage evolution
+```{r}
+x=as.numeric(colnames(elec_percentage))
+plot(x,as.numeric(elec_percentage[2,]),main="Percentage of electricity coming from renewable sources - EU",xlab="Year",ylab="Percentage",type="l")
+points(x,as.numeric(elec_percentage[2,]),col="Green",lwd=3)
+```
+
+
+
+Let's make a test to see if the three main renewable resources have the same distribution
+(MANOVA)
+
+```{r}
+use_hydro_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=2)
+use_wind_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=4)
+use_solar_elec=read.xlsx('data/use_renew_elec.xlsx',sheet=6)
+
+#clean hydro
+use_hydro_elec=use_hydro_elec[7:48,]
+colnames(use_hydro_elec)=use_hydro_elec[1,]
+use_hydro_elec=use_hydro_elec[-1,]
+rownames(use_hydro_elec)=use_hydro_elec[,1]
+use_hydro_elec=use_hydro_elec[,-1]
+
+use_hydro_elec=use_hydro_elec[!use_hydro_elec[,16]==':',]
+
+#clean wind
+use_wind_elec=use_wind_elec[7:48,]
+colnames(use_wind_elec)=use_wind_elec[1,]
+use_wind_elec=use_wind_elec[-1,]
+rownames(use_wind_elec)=use_wind_elec[,1]
+use_wind_elec=use_wind_elec[,-1]
+
+use_wind_elec=use_wind_elec[!use_wind_elec[,16]==':',]
+
+#clean solar
+use_solar_elec=use_solar_elec[7:48,]
+colnames(use_solar_elec)=use_solar_elec[1,]
+use_solar_elec=use_solar_elec[-1,]
+rownames(use_solar_elec)=use_solar_elec[,1]
+use_solar_elec=use_solar_elec[,-1]
+
+use_solar_elec=use_solar_elec[!use_solar_elec[,16]==':',]
+
+use_hydro_elec[] <- lapply(use_hydro_elec, as.numeric)
+use_wind_elec[] <- lapply(use_wind_elec, as.numeric)
+use_solar_elec[] <- lapply(use_solar_elec, as.numeric)
+
+
+use_principal=rbind(use_hydro_elec[4:40,],use_wind_elec[4:40,],use_solar_elec[4:40,])
+
+#factor vector
+source=c(rep("Hydro",37),rep("Wind",37),rep("Solar",37))
+source=factor(source)
+```
+
+plot trends
+```{r}
+matplot(colnames(use_principal),t(use_principal),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from Hydro-Wind-Solar",col=source)
+legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
+```
+Seems like Hydro is uniformly more used than the other two, let's proceed to statistically test this fact
+
+
+Observed statistic:
+```{r}
+fit <- manova(as.matrix(use_principal) ~ source)
+summary.manova(fit,test="Wilks") 
+T0 <- -summary.manova(fit,test="Wilks")$stats[1,2]
+T0
+```
+Run the test
+```{r}
+set.seed(seed)
+T_stat <- numeric(B)
+n=dim(use_principal)[1]
+
+for(perm in 1:B){
+  # choose random permutation
+  permutation <- sample(1:n)
+  source.perm <- source[permutation]
+  fit.perm <- manova(as.matrix(use_principal) ~ source.perm)
+  T_stat[perm] <- -summary.manova(fit.perm,test="Wilks")$stats[1,2]
+}
+
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30,main="Wilks stat permutational distribution")
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=c(-2,1),main="Wilks stat ecdf")
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val
+```
+So here we have statistical evidence that the three main renewable sources have not the same distribution in terms of total generated electricity.
+
+We can further investigate whether Solar and Wind are equally distributed (i.e. developing at the same rate) or not.
+
+```{r}
+wind.mean = colMeans(use_wind_elec[4:40,]) #combustible fuels
+solar.mean = colMeans(use_solar_elec[4:40,]) #renewables
+years_04_19=as.numeric(colnames(use_wind_elec)) #years from 2004 to 2019
+
+matplot(years_04_19,t(rbind(wind.mean,solar.mean)), type='l', col=c("green","red"), lty=1,xlab="Year",ylab="Gigawatt-hour",main="Mean electricity production")
+legend("topleft",legend=c("Wind","Solar"),col=c(3,2),pch=1)
+```
+
+```{r}
+n1 = n2=dim(use_wind_elec[4:40,])[1]
+n  = n1 + n2
+
+T20 = as.numeric((wind.mean-solar.mean) %*% (wind.mean-solar.mean))
+T20
+
+# Estimating the permutational distribution under H0
+
+T2 = numeric(B)
+set.seed(seed)
+t_pooled = rbind(use_wind_elec[4:40,],use_solar_elec[4:40,])
+
+for(perm in 1:B){
+  # Random permutation of indexes
+  permutation = sample(n)
+  t_perm = t_pooled[permutation,]
+  t1_perm = t_perm[1:n1,]
+  t2_perm = t_perm[(n1+1):n,]
+  
+  # Evaluation of the test statistic on permuted data
+  t1.mean_perm = colMeans(t1_perm)
+  t2.mean_perm = colMeans(t2_perm)
+  T2[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+}
+
+hist(T2,xlim=range(c(T2,T20)),main="Squared L2 norm of means difference - permutational distribution")
+abline(v=T20,col=3,lwd=4)
+
+plot(ecdf(T2),main="Squared L2 norm of means difference - permutational ecdf")
+abline(v=T20,col=3,lwd=4)
+
+pvalue=sum(T2>=T20)/B
+pvalue
+```
+
+
+We'll exploit local testing of this hypothesis, to (in case of rejection) directly obtain the time instant in which the developments are different
+
+```{r}
+library(fdatest)
+
+loc_test=IWT2(as.matrix(use_wind_elec),as.matrix(use_solar_elec),B=B,alternative="greater")
+plot(loc_test,main="Solar and Wind",col=c(2,3))
+```
+
+
+
+Let's make a step regression on total European values
+
+```{r}
+x=as.numeric(colnames(use_renew_elec)) #years from 2004 to 2019
+
+plot(x,use_renew_elec[2,],main="Total electricity from renewables - Europe",xlab="Year",ylab="Gigawatt-hour")
+```
+```{r}
+m_cut=lm(as.numeric(use_renew_elec[2,]) ~ cut(x,breaks=10))
+
+years.grid=seq(range(x)[1],range(x)[2],by=0.1)
+preds=predict(m_cut,list(x=years.grid),se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+plot(x ,as.numeric(use_renew_elec[2,]) ,xlim=range(years.grid) ,cex =.5, col =" darkgrey ",main='Custom cut Fit',xlab="Year",ylab="Gigawatt-hour")
+lines(years.grid,preds$fit ,lwd =2, col =" blue")
+matlines(years.grid ,se.bands ,lwd =1, col =" blue",lty =3)
+```
+Terrible...
+Let's try with local regression
+
+```{r}
+a=data.frame(giga=as.numeric(use_renew_elec[2,]),years_a=x)
+m_loc = npreg(giga ~ years_a,
+              ckertype = 'uniform',
+              bws = 2, # bandwidth
+              data= a)
+dat=data.frame(years_a=years.grid)
+preds=predict(m_loc,newdata=dat,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+plot(
+    x,
+    as.numeric(use_renew_elec[2,]) ,
+    xlim = range(years.grid) ,
+    cex = .5,
+    col = " darkgrey ",
+    main = 'Local Averaging - bws2 - Uniform kernel',
+    xlab="Year",
+    ylab="Gigawatt-hour"
+  )
+lines(years.grid,preds$fit ,lwd =2, col =" blue")
+matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
+```
+Maybe gaussian kernel would be better?
+```{r}
+a=data.frame(giga=as.numeric(use_renew_elec[2,]),years_a=x)
+m_loc = npreg(giga ~ years_a,
+              ckertype = 'gaussian',
+              bws = 1.5, # bandwidth
+              data= a)
+dat=data.frame(years_a=years.grid)
+preds=predict(m_loc,newdata=dat,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+plot(
+    x,
+    as.numeric(use_renew_elec[2,]) ,
+    xlim = range(years.grid) ,
+    cex = .5,
+    col = " darkgrey ",
+    main = 'Local Averaging - bws2 - Gaussian kernel',
+    xlab="Year",
+    ylab="Gigawatt-hour"
+  )
+lines(years.grid,preds$fit ,lwd =2, col =" blue")
+matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
+```
+
+```{r}
+list_vec=flatten(use_renew_elec[4:40,])
+vec=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:16){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec=rbind(vec,v)
+}
+vec=data.frame(vec)
+colnames(vec)=c("value","year")
+
+m_loc = npreg(value ~ year,
+              ckertype = 'gaussian',
+              bws = 2, # bandwidth
+              data= vec)
+dat=data.frame(year=years.grid)
+preds=predict(m_loc,newdata=dat,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+plot(
+    vec$year,
+    vec$value ,
+    xlim = range(years.grid) ,
+    cex = .5,
+    col = " darkgrey ",
+    main = 'Local Averaging - bws2 - Gaussian kernel',
+    xlab="Year",
+    ylab="Gigawatt-hour"
+  )
+lines(years.grid,preds$fit ,lwd =2, col =" blue")
+matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
+```
+Let's try with splines
+```{r}
+model_cubic_splines <-
+  lm(value ~ bs(year, degree = 3,df = 10), data = vec)
+
+preds=predict(model_cubic_splines,dat,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+with(vec, plot(year ,value ,xlim=range(dat$year) ,cex =.5, col =" darkgrey "))
+lines(dat$year,preds$fit ,lwd =2, col =" blue")
+matlines(dat$year, se.bands ,lwd =1, col =" blue",lty =3)
+```
+```{r}
+dif_use_wind_elec=use_wind_elec[,-1]-use_wind_elec[,-length(use_wind_elec)]
+```
+
+
+
+```{r}
+library(jsonlite)
+
+list_vec=flatten(dif_use_wind_elec[4:40,])
+vec_wind=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:15){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec_wind=rbind(vec_wind,v)
+}
+vec_wind=data.frame(vec_wind)
+colnames(vec_wind)=c("value_wind","year")
+```
+
+
+```{r}
+model_poly_wind=with(vec_wind,lm(value_wind ~ poly(year,degree=2)))
+year.grid=seq(range(vec_wind$year)[1],2024,by=0.1)
+
+preds=predict(model_poly_wind,list(year=year.grid),se=T)
+
+summary(model_poly_wind)
+```
+
+```{r}
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=matrix(poly(vec_wind$year,degree=2),ncol=2)
+pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_wind$year,degree=2),"coefs") ),ncol=2)
+
+c_preds_wind=conformal.pred(design_matrix,vec_wind$value_wind,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_wind, plot(year ,value_wind ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Wind'))
+lines(year.grid,preds$fit ,lwd =2, col =" green")
+lines(year.grid,c_preds_wind$pred ,lwd =2, col ="red",lty=3)
+#lines(year.grid,numeric(length(year.grid)),lwd=1,col="green",lty=3)
+matlines(year.grid ,c_preds_wind$up ,lwd =1, col =" green",lty =3)
+matlines(year.grid ,c_preds_wind$lo ,lwd =1, col =" green",lty =3)
+```
+```{r}
+pos=rep(c(TRUE,rep(FALSE,9)),15)
+pos=c(pos,rep(FALSE,51))
+predictions_wind=c_preds_wind$pred[pos]
+res_belgium=as.numeric(dif_use_wind_elec[20,]-predictions_wind)
+plot(res_belgium)
+```
+
+
+
+```{r}
+list_vec=flatten(use_solar_elec[4:40,])
+vec_solar=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:16){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec_solar=rbind(vec_solar,v)
+}
+vec_solar=data.frame(vec_solar)
+colnames(vec_solar)=c("value_solar","year")
+```
+
+
+```{r}
+model_poly_solar=with(vec_solar,lm(value_solar ~ poly(year,degree=2)))
+year.grid=seq(range(vec_solar$year)[1],2024,by=0.1)
+
+preds=predict(model_poly_solar,list(year=year.grid),se=T)
+
+
+```
+
+```{r}
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=matrix(poly(vec_solar$year,degree=2),ncol=2)
+pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_solar$year,degree=2),"coefs") ),ncol=2)
+
+c_preds_solar=conformal.pred(design_matrix,vec_solar$value_solar,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_solar, plot(year ,value_solar ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Solar'))
+lines(year.grid,preds$fit ,lwd =2, col =" red")
+lines(year.grid,c_preds_solar$pred ,lwd =2, col ="blue",lty=3)
+lines(year.grid,numeric(length(year.grid)),lwd=1,col="red",lty=3)
+matlines(year.grid ,c_preds_solar$up ,lwd =1, col ="red",lty =3)
+```
+```{r}
+list_vec=flatten(use_hydro_elec[4:40,])
+vec_hydro=cbind(list_vec[[1]],rep(2004,37))
+for (j in 2:16){
+  v=cbind(list_vec[[j]],rep(2004+j-1,37))
+  vec_hydro=rbind(vec_hydro,v)
+}
+vec_hydro=data.frame(vec_hydro)
+colnames(vec_hydro)=c("value_hydro","year")
+```
+
+
+```{r}
+model_poly_hydro=with(vec_hydro,lm(value_hydro ~ poly(year,degree=2)))
+year.grid=seq(range(vec_hydro$year)[1],2024,by=0.1)
+
+preds=predict(model_poly_hydro,list(year=year.grid),se=T)
+
+summary(model_poly_hydro)
+```
+
+```{r}
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=matrix(poly(vec_hydro$year,degree=2),ncol=2)
+pred_grid=matrix(poly(year.grid,degree=2,coefs = attr(poly(vec_hydro$year,degree=2),"coefs") ),ncol=2)
+
+c_preds_hydro=conformal.pred(design_matrix,vec_hydro$value_hydro,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_hydro, plot(year ,value_hydro ,xlim=range(year.grid),cex =.5,xlab="Year",ylab="Gigawatt-hour" ,col =" darkgrey ",main='Second grade polynomial conformal prediction - Hydro'))
+lines(year.grid,preds$fit ,lwd =2, col =" blue")
+lines(year.grid,c_preds_hydro$pred ,lwd =2, col ="green",lty=3)
+lines(year.grid,numeric(length(year.grid)),lwd=1,col="blue",lty=3)
+matlines(year.grid ,c_preds_hydro$up ,lwd =1, col =" blue",lty =3)
+```
+```{r}
+year.grid.ours=year.grid[year.grid<=2019.0]
+plot(year.grid,c_preds_hydro$pred,type="l",xlab="Year",ylab="Gigawatt-hour",main="Electricity production conformal predictions",ylim=c(0,25000),col="blue",lty=2)
+lines(year.grid,c_preds_solar$pred,col="red",lty=2)
+lines(year.grid,c_preds_wind$pred,col="green",lty=2)
+
+lines(year.grid.ours,c_preds_solar$pred[1:length(year.grid.ours)],col="red",lwd=2)
+lines(year.grid.ours,c_preds_wind$pred[1:length(year.grid.ours)],col="green",lwd=2)
+lines(year.grid.ours,c_preds_hydro$pred[1:length(year.grid.ours)],col="blue",lwd=2)
+abline(v=2019,col="black",lty=3)
+legend("topleft",legend=c("Hydro","Solar","Wind"),col=c("blue","red","green"),pch=1)
+```
+
+
+Same thing with splines
+```{r}
+br=quantile(vec_wind$year,probs = c(0.2,0.4,0.6,0.8))
+
+model_splines_wind <-
+  lm(value_wind ~ ns(year,knots = br), data = vec_wind)
+
+preds=predict(model_splines_wind,list(year=year.grid),se=T)
+
+lm_train=lm.funs(intercept = T)$train.fun
+lm_predict=lm.funs(intercept = T)$predict.fun
+
+design_matrix=ns(vec_wind$year, knots=br)
+pred_grid=matrix(ns(year.grid,knots = br),nrow=length(year.grid))
+
+c_preds=conformal.pred(design_matrix,vec_wind$value_wind,pred_grid,alpha=0.05,verbose=T,train.fun = lm_train,predict.fun = lm_predict,num.grid.pts = 200)
+
+with(vec_wind, plot(year ,value_wind ,xlim=range(year.grid) ,cex =.5, col =" darkgrey ",main="Natural splines prediction"))
+lines(year.grid,preds$fit ,lwd =2, col =" blue")
+lines(year.grid,c_preds$pred ,lwd =2, col ="red",lty=3)
+matlines(year.grid ,cbind(c_preds$up,c_preds$lo) ,lwd =1, col =" blue",lty =3)
+
+
+```
+Smoothing splines?
+```{r}
+fit=smooth.spline(vec_wind$year,vec_wind$value_wind,cv=T)
+
+opt = fit$df
+opt
+fit$lambda
+
+train_ss=function(x,y,out=NULL){
+  smooth.spline(x,y,df=opt)
+}
+
+predict_ss=function(obj, new_x){
+  predict(obj,new_x)$y
+}
+
+green=train_ss(vec_wind$year,vec_wind$value_wind)
+
+#predict_ss(green,vec_wind$year)
+```
+
+```{r}
+c_preds=conformal.pred(vec_wind$year,vec_wind$value_wind,year.grid,alpha=0.05,verbose=T,train.fun = train_ss ,predict.fun = predict_ss,num.grid.pts = 200)
+
+plot(vec_wind$year ,vec_wind$value_wind,cex =.5, col =" darkgrey ",xlim=range(year))
+lines(fit,col="blue",lwd=2)
+lines(year.grid,c_preds$pred ,lwd =2, col ="red",lty=3)
+matlines(year.grid ,cbind(c_preds$up,c_preds$lo) ,lwd =1, col =" blue",lty =3)
+
+```
+
+
+
+
+
+Import datasets about electricity network capacity
+
+Total capacity:
+```{r}
+total_capacity=read.xlsx('production_capacities_by_fuel.xlsx',sheet=1)
+#View(total_capacity)
+total_capacity=total_capacity[7:51,]    #quit useless rows
+colnames(total_capacity)=total_capacity[1,] #use years as columns names
+total_capacity=total_capacity[-1,] #first row now is useless
+rownames(total_capacity)=total_capacity[,1] #use countries as row names
+total_capacity=total_capacity[,-1] #first column is now useless
+
+total_capacity=total_capacity[!total_capacity[,1]==':',]
+View(total_capacity)
+total_capacity[] <- lapply(total_capacity, as.numeric)
+
+matplot(colnames(total_capacity),t(total_capacity[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Total electricity capacity")
+```
+
+
+Combustible fuels:
+```{r}
+capacity_comb_fuels=read.xlsx('production_capacities_by_fuel.xlsx',sheet=2)
+View(capacity_comb_fuels)
+```
+
+```{r}
+capacity_comb_fuels=capacity_comb_fuels[7:51,]    #quit useless rows
+colnames(capacity_comb_fuels)=capacity_comb_fuels[1,] #use years as columns names
+capacity_comb_fuels=capacity_comb_fuels[-1,] #first row now is useless
+rownames(capacity_comb_fuels)=capacity_comb_fuels[,1] #use countries as row names
+capacity_comb_fuels=capacity_comb_fuels[,-1] #first column is now useless
+```
+
+
+```{r}
+capacity_comb_fuels=capacity_comb_fuels[!capacity_comb_fuels[,1]==':',]
+View(capacity_comb_fuels)
+capacity_comb_fuels[] <- lapply(capacity_comb_fuels, as.numeric)
+
+no_total_cf=capacity_comb_fuels[4:38,] #first three rows are total european statistics
+```
+
+
+```{r}
+matplot(colnames(no_total_cf),t(no_total_cf),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacity from combustible fuels")
+```
+
+```{r}
+rownames(no_total_cf)[which.max(no_total_cf[,30])] 
+```
+Now for renewables we are going to sum all the capacities from all the (renewable) fuels
+
+7th dataframe contains nucelar energy, we have to decide whether include it or not!!!
+```{r}
+capacity_renew_fuels_1=read.xlsx('production_capacities_by_fuel.xlsx',sheet=3)
+capacity_renew_fuels_2=read.xlsx('production_capacities_by_fuel.xlsx',sheet=4)
+capacity_renew_fuels_3=read.xlsx('production_capacities_by_fuel.xlsx',sheet=5)
+capacity_renew_fuels_4=read.xlsx('production_capacities_by_fuel.xlsx',sheet=6)
+capacity_renew_fuels_5=read.xlsx('production_capacities_by_fuel.xlsx',sheet=7)
+capacity_renew_fuels_6=read.xlsx('production_capacities_by_fuel.xlsx',sheet=8)
+capacity_renew_fuels_7=read.xlsx('production_capacities_by_fuel.xlsx',sheet=9) #nuclear
+
+View(capacity_renew_fuels_1)
+```
+
+```{r}
+capacity_renew_fuels_1=capacity_renew_fuels_1[7:51,]    #quit useless rows
+colnames(capacity_renew_fuels_1)=capacity_renew_fuels_1[1,] #use years as columns names
+capacity_renew_fuels_1=capacity_renew_fuels_1[-1,] #first row now is useless
+rownames(capacity_renew_fuels_1)=capacity_renew_fuels_1[,1] #use countries as row names
+capacity_renew_fuels_1=capacity_renew_fuels_1[,-1] #first column is now useless
+
+capacity_renew_fuels_2=capacity_renew_fuels_2[7:51,]    #quit useless rows
+colnames(capacity_renew_fuels_2)=capacity_renew_fuels_2[1,] #use years as columns names
+capacity_renew_fuels_2=capacity_renew_fuels_2[-1,] #first row now is useless
+rownames(capacity_renew_fuels_2)=capacity_renew_fuels_2[,1] #use countries as row names
+capacity_renew_fuels_2=capacity_renew_fuels_2[,-1] #first column is now useless
+
+capacity_renew_fuels_3=capacity_renew_fuels_3[7:51,]    #quit useless rows
+colnames(capacity_renew_fuels_3)=capacity_renew_fuels_3[1,] #use years as columns names
+capacity_renew_fuels_3=capacity_renew_fuels_3[-1,] #first row now is useless
+rownames(capacity_renew_fuels_3)=capacity_renew_fuels_3[,1] #use countries as row names
+capacity_renew_fuels_3=capacity_renew_fuels_3[,-1] #first column is now useless
+
+capacity_renew_fuels_4=capacity_renew_fuels_4[7:51,]    #quit useless rows
+colnames(capacity_renew_fuels_4)=capacity_renew_fuels_4[1,] #use years as columns names
+capacity_renew_fuels_4=capacity_renew_fuels_4[-1,] #first row now is useless
+rownames(capacity_renew_fuels_4)=capacity_renew_fuels_4[,1] #use countries as row names
+capacity_renew_fuels_4=capacity_renew_fuels_4[,-1] #first column is now useless
+
+capacity_renew_fuels_5=capacity_renew_fuels_5[7:51,]    #quit useless rows
+colnames(capacity_renew_fuels_5)=capacity_renew_fuels_5[1,] #use years as columns names
+capacity_renew_fuels_5=capacity_renew_fuels_5[-1,] #first row now is useless
+rownames(capacity_renew_fuels_5)=capacity_renew_fuels_5[,1] #use countries as row names
+capacity_renew_fuels_5=capacity_renew_fuels_5[,-1] #first column is now useless
+
+capacity_renew_fuels_6=capacity_renew_fuels_6[7:51,]    #quit useless rows
+colnames(capacity_renew_fuels_6)=capacity_renew_fuels_6[1,] #use years as columns names
+capacity_renew_fuels_6=capacity_renew_fuels_6[-1,] #first row now is useless
+rownames(capacity_renew_fuels_6)=capacity_renew_fuels_6[,1] #use countries as row names
+capacity_renew_fuels_6=capacity_renew_fuels_6[,-1] #first column is now useless
+
+
+capacity_renew_fuels_7=capacity_renew_fuels_7[7:51,]    #quit useless rows
+colnames(capacity_renew_fuels_7)=capacity_renew_fuels_7[1,] #use years as columns names
+capacity_renew_fuels_7=capacity_renew_fuels_7[-1,] #first row now is useless
+rownames(capacity_renew_fuels_7)=capacity_renew_fuels_7[,1] #use countries as row names
+capacity_renew_fuels_7=capacity_renew_fuels_7[,-1] #first column is now useless
+
+capacity_renew_fuels_1=capacity_renew_fuels_1[!capacity_renew_fuels_1[,1]==':',]
+capacity_renew_fuels_2=capacity_renew_fuels_2[!capacity_renew_fuels_2[,1]==':',]
+capacity_renew_fuels_3=capacity_renew_fuels_3[!capacity_renew_fuels_3[,1]==':',]
+capacity_renew_fuels_4=capacity_renew_fuels_4[!capacity_renew_fuels_4[,1]==':',]
+capacity_renew_fuels_5=capacity_renew_fuels_5[!capacity_renew_fuels_5[,1]==':',]
+capacity_renew_fuels_6=capacity_renew_fuels_6[!capacity_renew_fuels_6[,1]==':',]
+capacity_renew_fuels_7=capacity_renew_fuels_7[!capacity_renew_fuels_7[,1]==':',]
+View(capacity_renew_fuels_1)
+```
+
+
+```{r}
+capacity_renew_fuels_no_nuclear=capacity_renew_fuels_1
+
+for (j in 1:30){
+   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_2[,j])
+}
+
+for (j in 1:30){
+   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_3[,j])
+}
+for (j in 1:30){
+   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_4[,j])
+}
+for (j in 1:30){
+   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_5[,j])
+}
+for (j in 1:30){
+   capacity_renew_fuels_no_nuclear[,j]=as.numeric(capacity_renew_fuels_no_nuclear[,j])+as.numeric(capacity_renew_fuels_6[,j])
+}
+
+```
+
+```{r}
+capacity_renew_fuels_nuclear=capacity_renew_fuels_no_nuclear
+for (j in 1:30){
+   capacity_renew_fuels_nuclear[,j]=as.numeric(capacity_renew_fuels_nuclear[,j])+
+                                    as.numeric(capacity_renew_fuels_7[,j])
+}
+```
+
+
+```{r}
+no_total_no_nuclear=capacity_renew_fuels_no_nuclear[4:38,]
+
+
+matplot(colnames(no_total_no_nuclear),t(no_total_no_nuclear),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (no nuclear)")
+```
+Let's compute the median curve and plot it
+```{r}
+band_depth <- BD(Data = no_total_no_nuclear)
+modified_band_depth <- MBD(Data = no_total_no_nuclear)
+
+#median_curve <- median_fData(fData = capacity_renew_fuels_no_nuclear, type = "MBD")
+
+median_curve_manual <- no_total_no_nuclear[which.max(modified_band_depth),]
+
+matplot(colnames(capacity_renew_fuels_no_nuclear),t(no_total_no_nuclear),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (no nuclear)")
+lines(colnames(capacity_renew_fuels_no_nuclear),median_curve_manual,col="red",lwd=5)
+```
+
+```{r}
+rownames(no_total_no_nuclear)[which.max(no_total_no_nuclear[,30])]
+```
+
+Trying to detect outliers but can't manage to make it work
+```{r}
+#invisible(fbplot(fdata(capacity_renew_fuels_no_nuclear[4:38,])[[1]]
+#                 , main="Magnitude outliers"))
+#invisible(outliergram(fdata(capacity_renew_fuels_no_nuclear[4:38,])[[1]]))
+```
+
+
+Trying to perform some tests on electricity capacities (non renewables vs renewables: do they have the same distribution?)
+Two population multivariate test
+```{r}
+B = 10000
+seed = 26
+
+cf.mean = colMeans(no_total_cf) #combustible fuels
+ren.mean = colMeans(no_total_no_nuclear) #renewables
+years=as.numeric(colnames(capacity_comb_fuels)) #years from 1990 to 2019
+
+matplot(years,t(rbind(cf.mean,ren.mean)), type='l', col=c("red","green"), lty=1,xlab="Year",ylab="Megawatt",main="Mean production capacity")
+
+```
+Let's compute the test statistics
+```{r}
+n1 = dim(no_total_cf)[1]
+n2 = dim(no_total_no_nuclear)[1]
+n  = n1 + n2
+
+T20 = as.numeric((cf.mean-ren.mean) %*% (cf.mean-ren.mean))
+T20
+
+# Estimating the permutational distribution under H0
+
+T2 = numeric(B)
+set.seed(seed)
+t_pooled = rbind(no_total_cf,no_total_no_nuclear)
+
+for(perm in 1:B){
+  # Random permutation of indexes
+  permutation = sample(n)
+  t_perm = t_pooled[permutation,]
+  t1_perm = t_perm[1:n1,]
+  t2_perm = t_perm[(n1+1):n,]
+  
+  # Evaluation of the test statistic on permuted data
+  t1.mean_perm = colMeans(t1_perm)
+  t2.mean_perm = colMeans(t2_perm)
+  T2[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+}
+```
+```{r}
+hist(T2,xlim=range(c(T2,T20)))
+abline(v=T20,col=3,lwd=4)
+
+plot(ecdf(T2))
+abline(v=T20,col=3,lwd=4)
+```
+P-value:
+```{r}
+p_val = sum(T2>=T20)/B
+p_val
+```
+In this case we don't have statistical evidence to reject the null hypotesis of equal distributions
+
+
+
+Now let's make a nonparametric regression to compare trends of renewable vs non renewable electricity capacity in all European Union
+
+```{r}
+plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+```
+
+```{r}
+m_list=lapply(1:10,function(degree){lm(as.numeric(capacity_comb_fuels[2,]) ~ poly(as.numeric(years),degree=degree))})
+do.call(anova,m_list)
+```
+
+```{r}
+summary(m_list[[2]])
+```
+
+```{r}
+summary(m_list[[3]])
+
+```
+
+```{r}
+summary(m_list[[6]])
+
+```
+
+```{r}
+plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years,m_list[[2]]$fitted.values,col="red")
+
+```
+```{r}
+plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years,m_list[[3]]$fitted.values,col="red")
+```
+```{r}
+plot(years,as.numeric(capacity_comb_fuels[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years,m_list[[6]]$fitted.values,col="red")
+```
+Third grade polynomial regression seems reasonable (theorethically we should choose grade 9, since it's the last significant model: 10th grade regression is non significant)
+```{r}
+comb_model=m_list[[3]]
+```
+
+
+
+Now let's move to renewables
+```{r}
+plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+```
+
+```{r}
+m_list=lapply(1:10,function(degree){lm(as.numeric(capacity_renew_fuels_no_nuclear[2,]) ~ poly(as.numeric(years),degree=degree))})
+do.call(anova,m_list)
+```
+```{r}
+summary(m_list[[2]])
+
+```
+```{r}
+summary(m_list[[4]])
+
+```
+```{r}
+summary(m_list[[7]])
+
+```
+```{r}
+plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years,m_list[[2]]$fitted.values,col="green")
+```
+```{r}
+plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years,m_list[[4]]$fitted.values,col="green")
+```
+
+```{r}
+plot(years,as.numeric(capacity_renew_fuels_no_nuclear[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years,m_list[[7]]$fitted.values,col="green")
+```
+Since by passing to fourth grade we only add one parameter w.r.t second grade (third grade coefficient is considered zero), we can consider the fourth grade regression.
+
+But we can notice that the coefficient of fourth grade is negative! It's not really reasonable for future predictions, so we stick to second grade
+
+
+```{r}
+ren_model=m_list[[2]]
+```
+
+```{r}
+anni=seq(range(years)[1],range(years)[2],by=0.25)
+preds=predict(comb_model,list(years=anni),se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni), ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+5000,cex =.5, col =" darkgrey ",main='Degree 3 poly combustible, degree 4 poly renewables',xlab="Year",ylab="Megawatt")
+lines(anni,preds$fit ,lwd =2, col =" red")
+matlines (anni ,se.bands ,lwd =1, col =" red",lty =3)
+
+preds=predict(ren_model,list(years=anni),se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ",pch=2)
+lines(anni,preds$fit ,lwd =2, col =" green")
+matlines (anni ,se.bands ,lwd =1, col =" green",lty =3)
+```
+Let's try with spline regression
+```{r}
+anni=seq(range(years)[1],range(years)[2],by=0.25)
+
+#combustible fuels
+b=data.frame(cap=as.numeric(capacity_comb_fuels[2,]),years_b=years)
+comb_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=b )
+dat_b=data.frame(years_b=anni)
+
+preds=predict(comb_model_spline,dat_b,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni),
+    ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+5000,cex =.5, col =" darkgrey ",
+    main="Splines regression capacity",xlab="Year",ylab="Megawatt")
+
+legend("topleft",legend=c("Non-renewables","Renewables"),col=c(2,3),pch=1)
+
+lines(anni,preds$fit ,lwd =2, col =" red")
+matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
+
+#renewables
+c=data.frame(cap=as.numeric(capacity_renew_fuels_no_nuclear[2,]),years_b=years)
+ren_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=c )
+dat_b=data.frame(years_b=anni)
+
+preds=predict(ren_model_spline,dat_b,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
+lines(anni,preds$fit ,lwd =2, col =" green")
+matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
+```
+
+Natural splines
+```{r}
+comb_model_spline <- lm(cap ~ ns(years_b, df=8), data=b )
+dat_b=data.frame(years_b=anni)
+
+preds=predict(comb_model_spline,dat_b,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+plot(years ,as.numeric(capacity_comb_fuels[2,]) ,xlim=range(anni) ,ylim=range(as.numeric(capacity_renew_fuels_no_nuclear[2,]))+3000,cex =.5, col =" darkgrey ",
+     main="Natural Splines regression on European electricity capacity",xlab="Year",ylab="Megawatt")
+
+legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
+
+lines(anni,preds$fit ,lwd =2, col =" red")
+matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
+
+ren_model_spline <- lm(cap ~ ns(years_b, df=7), data=c )
+dat_b=data.frame(years_b=anni)
+
+preds=predict(ren_model_spline,dat_b,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+points(years ,as.numeric(capacity_renew_fuels_no_nuclear[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
+lines(anni,preds$fit ,lwd =2, col =" green")
+matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
+```
+
+
+Set a region-based analysis of electricity capacity
+
+```{r}
+countries=rownames(no_total_no_nuclear)
+north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
+
+east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
+
+south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
+
+central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
+
+length(countries)==length(c(north_europe,south_europe,east_europe,central_europe))  #just to see correct division
+```
+Let's build the dataframe with groups attached, to perform an anova test on 2019 capacities
+```{r}
+north=no_total_no_nuclear[match(north_europe,countries),30]
+east=no_total_no_nuclear[match(east_europe,countries),30]
+south=no_total_no_nuclear[match(south_europe,countries),30]
+central=no_total_no_nuclear[match(central_europe,countries),30]
+
+north=cbind(north,rep("North",length(north)))
+east=cbind(east,rep("Eastern",length(east)))
+south=cbind(south,rep("South",length(south)))
+central=cbind(central,rep("Central",length(central)))
+
+aov_no_nuclear=data.frame(rbind(north,east,south,central),row.names=c(north_europe,east_europe,south_europe,central_europe))
+colnames(aov_no_nuclear)=c("cap_19","Region")
+aov_no_nuclear$Region=factor(aov_no_nuclear$Region)
+```
+
+Proceed with anova test
+```{r}
+attach(aov_no_nuclear)
+g=nlevels(aov_no_nuclear$Region)
+g
+boxplot(as.numeric(cap_19) ~ Region,col=rainbow(g),main="Electricity capacity by region",ylab="Megawatt")
+```
+
+```{r}
+cap_19=as.numeric(cap_19)
+fit <- aov(cap_19 ~ Region)
+T0 <- summary(fit)[[1]][1,4]
+
+B=10000
+T_stat <- numeric(B) 
+n <- dim(aov_no_nuclear)[1]
+
+for(perm in 1:B){
+  # Permutation:
+  permutation <- sample(1:n)
+  cap_perm <- cap_19[permutation]
+  fit_perm <- aov(cap_perm ~ Region)
+  
+  # Test statistic:
+  T_stat[perm] <- summary(fit_perm)[[1]][1,4]
+}
+```
+
+```{r}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=c(-1,20))
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val
+```
+With aovp?
+```{r}
+library(lmPerm)
+lmp=aovp(cap_19 ~ Region,perm="Prob",Cp=1e-6)#cp is supposed to stop iterations when standard error is at that level...
+summary(lmp)
+detach(aov_no_nuclear)
+#pretty much same result
+```
+Again, we don't have statistical evidence to say that electricity capacities from renewables have different distribution in the four regions of Europe.
+This is not a meaningful result, since we are not taking into account the sizes of countries. It's better to analyze a relative quantity, like the ratio between renewable and total capacity!
+
+Let's build the ad-hoc dataframe with relative capacities of 2019
+```{r}
+north=no_total_no_nuclear[match(north_europe,countries),30]/(total_capacity[4:38,][match(north_europe,countries),30])
+
+east=no_total_no_nuclear[match(east_europe,countries),30]/(total_capacity[4:38,][match(east_europe,countries),30])
+
+south=no_total_no_nuclear[match(south_europe,countries),30]/(total_capacity[4:38,][match(south_europe,countries),30])
+
+central=no_total_no_nuclear[match(central_europe,countries),30]/(total_capacity[4:38,][match(central_europe,countries),30])
+
+north=cbind(north,rep("Northern",length(north)))
+east=cbind(east,rep("Eastern",length(east)))
+south=cbind(south,rep("Southern",length(south)))
+central=cbind(central,rep("Central",length(central)))
+
+aov_ratio_cap=data.frame(rbind(north,east,south,central),row.names=c(north_europe,east_europe,south_europe,central_europe))
+colnames(aov_ratio_cap)=c("ratio_cap_19","Region")
+aov_ratio_cap$Region=factor(aov_ratio_cap$Region)
+```
+
+```{r}
+attach(aov_ratio_cap)
+g=nlevels(aov_ratio_cap$Region)
+g
+boxplot(as.numeric(ratio_cap_19) ~ Region,col=c("cyan1","indianred1","cornflowerblue","chartreuse1"),main="Relative renewable electricity capacity by region",ylab="Percentage")
+```
+```{r}
+ratio_cap_19=as.numeric(ratio_cap_19)
+fit <- aov(ratio_cap_19 ~ Region)
+T0 <- summary(fit)[[1]][1,4]
+
+T_stat <- numeric(B) 
+n <- dim(aov_ratio_cap)[1]
+
+for(perm in 1:B){
+  # Permutation:
+  permutation <- sample(1:n)
+  cap_perm <- ratio_cap_19[permutation]
+  fit_perm <- aov(cap_perm ~ Region)
+  
+  # Test statistic:
+  T_stat[perm] <- summary(fit_perm)[[1]][1,4]
+}
+```
+
+```{r}
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30,main="F stat permutational distribution")
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=c(-1,20),main="F stat permutational ecdf")
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val
+detach(aov_ratio_cap)
+```
+Still no statistical evidence of different development in different regions
+
+
+Let's find a 95% confidence interval for the median of electricity capacity from renewables of 2019
+```{r}
+median(aov_no_nuclear$cap_19)
+```
+```{r}
+uni_t_perm=function(data,mu0,B=1000){
+
+data_trans=data-mu0
+T0=abs(median(data_trans))
+T_perm=numeric(B)
+n=length(data)
+
+for(perm in 1:B){
+  
+  refl <- rbinom(n, 1, 0.5)*2 - 1
+  T_perm[perm]=abs(median(data_trans*refl))
+
+}
+return(sum(T_perm>=T0)/B)
+}
+```
+
+```{r}
+grid=seq(3000,7400,by=0.5)
+length(grid)
+library(pbapply)
+library(parallel)
+```
+
+```{r}
+cores=detectCores()
+cl=makeCluster(cores)
+clusterExport(cl,varlist=list("data","uni_t_perm"))
+```
+
+```{r}
+data=as.numeric(aov_no_nuclear$cap_19)
+perm_wrapper=function(grid_point){uni_t_perm(data,grid_point,B=2000)}
+pval_function=pbsapply(grid,perm_wrapper,cl=cl)
+```
+
+```{r}
+plot(grid,pval_function,type='l')
+range(grid[pval_function>0.05])
+```
+
+
+
+
+```{r}
+matplot(colnames(capacity_renew_fuels_nuclear),t(capacity_renew_fuels_nuclear[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (with nuclear)")
+```
+
+
+Even if we include nuclear, Germany is still at the top
+```{r}
+rownames(capacity_renew_fuels_nuclear)[which.max(capacity_renew_fuels_nuclear[4:38,30])+3] #first three rows are total european statistics
+```
