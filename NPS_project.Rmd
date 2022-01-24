@@ -39,7 +39,7 @@ library(mgcv)
 library(conformalInference)
 
 
-B=100000
+B=10000
 seed=42
 ```
 
@@ -64,8 +64,9 @@ preprocess <- function(df, start_nrows=6, end_nrows=2, tj=T) {
     df <- df[,-1]
     
     rownames(df)[1] <- "year"
+    rownames(df)[3] <- "European_Union" #we use 28 countries as European total value
     
-    # Remove rows with NA values 
+    # Remove rows with NA values (in first column)
     df <- df[!df[,1]==':',]
     
     
@@ -87,7 +88,7 @@ In our script "preprocessing_SSP.rmd", we have additional code regarding the tra
 # Starting Point: Analysis of current European Renewable Transition
 
 
-Loading necessary datasets. In energy balances we dont have the value Final Consumption (FC), but it can be estimated as sum of several.
+Loading necessary datasets. In energy balances we don't have the value Final Consumption (FC), but it can be estimated as sum of several.
 
 ```{r}
 energy.balances.1  <- read.xlsx("data/complete_energy_balances.xlsx",sheet=1) # Gross available energy, first sheet should be the best
@@ -113,12 +114,12 @@ We will now preprocess all datasets with our auxilary function. We will also com
 
 energy.balances.p <- preprocess(energy.balances.1, tj=F)
 
-consump.fossils.p <- preprocess(consump.fossils[,-32], tj=T) # wo 2020
+consump.fossils.p <- preprocess(consump.fossils[,-32], tj=T) # without 2020 because of some missing data
 
-consump.fossils.p[-1,] <- consump.fossils.p[-1,] * 25 #  Calorific power of FF
+consump.fossils.p[-1,] <- consump.fossils.p[-1,] * 25 #  Calorific power of Fossil Fuels
                                  
-consump.oil.petr.p <- preprocess(consump.oil.petr[,-32], tj=F) # wo 2020
-consump.gas.p      <- preprocess(consump.gas[,-32], tj=T) # wo 2020
+consump.oil.petr.p <- preprocess(consump.oil.petr[,-32], tj=F) # without 2020
+consump.gas.p      <- preprocess(consump.gas[,-32], tj=T) # without 2020
 
 
 consump.renew.1.p <- preprocess(consump.renew.1[,-32])
@@ -137,37 +138,37 @@ consump.renew.p[-1,] <- consump.renew.p[-1,] + consump.renew.2.p[-1,] + consump.
 We can check what we obtain in total:
 
 ```{r}
-consump.total.p <-  consump.renew.p[2,1] +
-                    consump.oil.petr.p[2,1] +
-                    consump.fossils.p[2,1] +
-                    consump.gas.p[2,1]
+#consump.total.p <-  consump.renew.p[2,1] +
+                    #consump.oil.petr.p[2,1] +
+                    #consump.fossils.p[2,1] +
+                    #consump.gas.p[2,1]
                     # derived.heat +
                     # electricity 
-consump.total.p
+#consump.total.p
 ```
 
 
-To visualize the obtained data, we can plot the energy balances and consumption levels for two countries:
+To visualize the obtained data, we can plot European renewable and non renewable consumption levels:
 
 ```{r}
-p_italy <- ggplot(data=as.data.frame(t(energy.balances.p)), aes(x=year, y=Italy)) +
-            labs(title="Energy Balances Progression - Italy", 
-                 subtitle="Gross Available Energy") +
+r_europe <- ggplot(data=as.data.frame(t(consump.renew.p)), aes(x=year, y=European_Union)) +
+            labs(title="Renewable Energies Consumption Progression - European Union", 
+                 subtitle="Inland Consumption") +
             xlab("Year") + ylab("Terajoules") +
             geom_point() +
             geom_smooth(method="loess", formula=y~x, fill="blue", colour="darkblue", size=1)
-p_italy
+r_europe
 ```
 
 ```{r}
-# Example of consumption of solid fossil fuels
-p_sweden <- ggplot(data=as.data.frame(t(consump.fossils.p)), aes(x=year, y=Sweden)) + #plot of energy balance or consumption of solid fossil fuels?
-            labs(title="Consumption Solid Fossil Fuels - Sweden", 
+# Example of European consumption of solid fossil fuels
+f_europe <- ggplot(data=as.data.frame(t(consump.fossils.p)), aes(x=year, y=European_Union)) +
+            labs(title="Consumption Solid Fossil Fuels - European Union", 
                  subtitle="Inland consumption") +
             xlab("Year") + ylab("Terajoules") +
             geom_point() +
             geom_smooth(method="loess", formula=y~x, fill="red", colour="darkred", size=1)
-p_sweden
+f_europe
 
 ```
 
@@ -179,7 +180,7 @@ year.grid      <- seq(year.min, year.max)
 
 countries.list <- rownames(consump.fossils.p[-c(1,2,3,4),]) 
 
-# Removal of total EU levels on all datasets 
+# Construct datsets without total European values 
 energy.balances.countries  <- energy.balances.p[-c(1,2,3,4),]
 consump.fossils.countries  <- consump.fossils.p[-c(1,2,3,4),]
 consump.oil.petr.countries <- consump.oil.petr.p[-c(1,2,3,4),]
@@ -193,13 +194,14 @@ colnames(consump.gas.countries) <- NULL
 colnames(consump.renew.countries) <- NULL
 ```
 
-We obtain the differences year to year for each 
+Since we are working with time series, by their nature data are yearly correlated.
+To deal with this problem, let's construct year to year variations dataset:
 ```{r}
-energy.balances.diff <- energy.balances.p[-1,-length(energy.balances.p)] - energy.balances.p[-1,-1]
-consump.fossils.diff <- consump.fossils.p[-1,-length(consump.fossils.p)] - consump.fossils.p[-1,-1]
-consump.oil.petr.diff <- consump.oil.petr.p[-1,-length(consump.oil.petr.p)] - consump.oil.petr.p[-1,-1]
-consump.gas.diff <- consump.gas.p[-1,-length(consump.gas.p)] - consump.gas.p[-1,-1]
-consump.renew.diff <- consump.renew.p[-1,-length(consump.renew.p)] - consump.renew.p[-1,-1]
+energy.balances.diff <- energy.balances.p[-1,-1] - energy.balances.p[-1,-length(energy.balances.p)]
+consump.fossils.diff <- consump.fossils.p[-1,-1] - consump.fossils.p[-1,-length(consump.fossils.p)]
+consump.oil.petr.diff <- consump.oil.petr.p[-1,-1] - consump.oil.petr.p[-1,-length(consump.oil.petr.p)]
+consump.gas.diff <- consump.gas.p[-1,-1] - consump.gas.p[-1,-length(consump.gas.p)]
+consump.renew.diff <- consump.renew.p[-1,-1] - consump.renew.p[-1,-length(consump.renew.p)]
 
 energy.balances.diff <- rbind(year=seq(1991, 2019), energy.balances.diff)
 consump.fossils.diff <- rbind(year=seq(1991, 2019), consump.fossils.diff)
@@ -208,21 +210,20 @@ consump.gas.diff <- rbind(year=seq(1991, 2019), consump.gas.diff)
 consump.renew.diff <- rbind(year=seq(1991, 2019), consump.renew.diff)
 ```
 
-
-We can divide this section into three points.
+The analysis of current European renewable transition is structured in three sections:
 
 ## 1. What is the trend of renewable and non-renewable consumptions.
 
 
 We can visualize the consumption levels of all EU countries.
 
-Via time series visualization:
+Via time series visualization of :
 ```{r}
-matplot(seq(year.min, year.max), t(energy.balances.countries), type="l", lty=1,
-        main="Energy Balances EU 1990 - 2019", xlab="Year", ylab="Terajoules")
+#matplot(seq(year.min, year.max), t(energy.balances.countries), type="l", lty=1,
+        #main="Energy Balances EU 1990 - 2019", xlab="Year", ylab="Terajoules")
 
 matplot(seq(year.min, year.max), t(consump.fossils.countries), type="l", lty=1,
-        main="Consumption of solid fossil fuels EU 1990 - 2019", xlab="Year",
+        main="Consumption of Solid Fossil Fuels EU 1990 - 2019", xlab="Year",
         ylab="Terajoules")
 
 matplot(seq(year.min, year.max), t(consump.oil.petr.countries), type="l", lty=1,
@@ -234,14 +235,14 @@ matplot(seq(year.min, year.max), t(consump.gas.countries), type="l", lty=1,
         ylab="Terajoules")
 
 matplot(seq(year.min, year.max), t(consump.renew.countries), type="l", lty=1,
-        main="Consumption of RE EU 1990 - 2019", xlab="Year",
+        main="Consumption of Renewables EU 1990 - 2019", xlab="Year",
         ylab="Terajoules")
 ```
 
 Via boxplot:
 ```{r}
-boxplot(energy.balances.countries, main="Boxplot Energy Balances", xlab="Countries", 
-        ylab="Terajoules")
+#boxplot(energy.balances.countries, main="Boxplot Energy Balances", xlab="Countries", 
+        #ylab="Terajoules")
 
 boxplot(consump.fossils.countries, main="Boxplot of Consumption of Solid Fossil Fuels", xlab="Countries", 
         ylab="Terajoule")
@@ -259,15 +260,15 @@ boxplot(consump.renew.countries, main="Consumption of Renewables", xlab="Countri
 
 First let us check for normality with a simple Shapiro-Wilk test.
 
-Let us visualize a random country from the dataset and check whether it might be normaly distributed:
+Let us visualize a random country from the dataset and check whether it might be normally distributed:
 
 ```{r}
 
-index.italy <- which(rownames(consump.renew.countries) == c("Italy"))
-hist(t(consump.fossils.countries)[,index.italy])
-hist(t(consump.oil.petr.countries)[,index.italy])
-hist(t(consump.gas.countries)[,index.italy])
-hist(t(consump.renew.countries)[,index.italy])
+index.italy <- which(rownames(consump.renew.diff) == c("Italy"))
+hist(t(consump.fossils.diff)[,index.italy])
+hist(t(consump.oil.petr.diff)[,index.italy])
+hist(t(consump.gas.diff)[,index.italy])
+hist(t(consump.renew.diff)[,index.italy])
 
 ```
 
@@ -279,23 +280,23 @@ p.values.op <- numeric(length(countries.list)) # Oil&Petr.
 p.values.ng <- numeric(length(countries.list)) # Natural gas 
 p.values.re <- numeric(length(countries.list)) # RE
 for(c in 1:length(countries.list)){
-    p.values.ff[c] <- shapiro.test(t(consump.fossils.countries)[,c])$p.value
-    p.values.op[c] <- shapiro.test(t(consump.oil.petr.countries)[,c])$p.value
-    p.values.ng[c] <- shapiro.test(t(consump.gas.countries)[,c])$p.value # Ignore errors
-    p.values.re[c] <- shapiro.test(t(consump.renew.countries)[,c])$p.value
+    p.values.ff[c] <- shapiro.test(t(consump.fossils.diff)[,c])$p.value
+    p.values.op[c] <- shapiro.test(t(consump.oil.petr.diff)[,c])$p.value
+    p.values.ng[c] <- shapiro.test(t(consump.gas.diff)[,c])$p.value # Ignore errors
+    p.values.re[c] <- shapiro.test(t(consump.renew.diff)[,c])$p.value
 
 
     
 }
-hist(p.values.ff) # Shapiro-Wilk test might fail with small n values
-hist(p.values.op) # Shapiro-Wilk test might fail with small n values
-hist(p.values.ng) # Shapiro-Wilk test might fail with small n values
-hist(p.values.re) # Shapiro-Wilk test might fail with small n values
+hist(p.values.ff,breaks=20)
+hist(p.values.op,breaks=20)
+hist(p.values.ng,breaks=20)
+hist(p.values.re,breaks=20)
 ```
 
 ### Permutational Two Population MV test - Comparing Consumption distributions
 
-We want to compare the distributions of NR vs R fuels for each country:
+We want to compare the distributions of Non Renewable vs Renewable fuels for each country:
 ```{r}
 consump.fossils.mean <- colMeans(consump.fossils.countries, na.rm=T)
 consump.oil.petr.mean <- colMeans(consump.oil.petr.countries, na.rm=T)
@@ -434,7 +435,8 @@ matplot(seq(year.min, year.max), t(rbind(mean.consump.nonrenew.mean,
 legend("topright",legend=c("Non-renewable sources","Renewable sources"),col=c(1,3),pch=2)
 
 
-mean.consump.nonrenew.diff <- mean.consump.nonrenew[,-length(mean.consump.nonrenew)] - mean.consump.nonrenew[,-1] #"inverse" deltas to obtain growing curve differences
+mean.consump.nonrenew.diff <- mean.consump.nonrenew[,-length(mean.consump.nonrenew)] - mean.consump.nonrenew[,-1] #"inverse" deltas for non renewables to obtain growing curve differences
+
 consump.renew.diff <- consump.renew.countries[,-1] - consump.renew.countries[,-length(consump.renew.countries)]
 
 mean.consump.nonrenew.diff.mean <- colMeans(mean.consump.nonrenew.diff, na.rm=T)
@@ -697,7 +699,7 @@ Let's see which country is particularly above the others in total usage of renew
 ```{r}
 rownames(use_renew_elec)[which.max(use_renew_elec[4:40,16])+3] #first three rows are total european statistics
 ```
-Construct dataset with percentages of electricity coming from renewables
+Construct dataset with percentages of electricity coming from renewables to visualize its evolution at a European level
 ```{r}
 elec_percentage <- tot_elec
 
@@ -706,22 +708,17 @@ for (j in 1:16){
   #34th row is Montenegro, which didn't survive preprocessing in the total electricity production dataset
 }
 # View(elec_percentage)
-```
 
-EU's percentage evolution
-
-```{r}
 x <- as.numeric(colnames(elec_percentage))
 plot(x,as.numeric(elec_percentage[2,]),main="Percentage of electricity coming from renewable sources - EU",xlab="Year",ylab="Percentage",type="l")
 points(x,as.numeric(elec_percentage[2,]),col="Green",lwd=3)
 ```
 
 
+
 ### MANOVA to compare the distributions from the three main types of RE for electricity consumption
 
-Let's make a test to see if the three main renewable resources have the same distribution
-(MANOVA)
-
+Getting and preprocessing electricity data
 ```{r}
 use_hydro_elec <-read.xlsx('data/use_renew_elec.xlsx',sheet=2)
 use_wind_elec <- read.xlsx('data/use_renew_elec.xlsx',sheet=4)
@@ -770,18 +767,18 @@ Obtain differences year to year from these datasets, as done before:
 
 ```{r}
 
-tot_elec.diff        <- tot_elec[,-length(tot_elec)] - tot_elec[,-1]
+tot_elec.diff        <- tot_elec[,-1] - tot_elec[,-length(tot_elec)]
 colnames(tot_elec.diff) <- seq(2005,2019)
 
-use_renew_elec.diff  <- use_renew_elec[,-length(use_renew_elec)] - use_renew_elec[,-1] 
+use_renew_elec.diff  <- use_renew_elec[,-1] - use_renew_elec[,-length(use_renew_elec)] 
 colnames(use_renew_elec.diff) <- seq(2005,2019)
 
-elec_percentage.diff <- elec_percentage[,-length(elec_percentage)] - elec_percentage[,-1]
+elec_percentage.diff <- elec_percentage[,-1] - elec_percentage[,-length(elec_percentage)]
 colnames(elec_percentage.diff) <- seq(2005,2019)
 
-use_hydro_elec.diff  <- use_hydro_elec[,-length(use_hydro_elec)] - use_hydro_elec[,-1]
-use_solar_elec.diff  <- use_hydro_elec[,-length(use_hydro_elec)] - use_hydro_elec[,-1]
-use_wind_elec.diff   <- use_hydro_elec[,-length(use_hydro_elec)] - use_hydro_elec[,-1]
+use_hydro_elec.diff  <- use_hydro_elec[,-1] - use_hydro_elec[,-length(use_hydro_elec)]
+use_solar_elec.diff  <- use_solar_elec[,-1] - use_solar_elec[,-length(use_solar_elec)]
+use_wind_elec.diff   <- use_wind_elec[,-1] - use_wind_elec[,-length(use_wind_elec)]
 colnames(use_hydro_elec.diff) <- seq(2005,2019)
 colnames(use_solar_elec.diff) <- seq(2005,2019)
 colnames(use_wind_elec.diff) <- seq(2005,2019)
@@ -806,6 +803,7 @@ legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 
 
 Seems like Hydro is uniformly more used than the other two, let's proceed to statistically test this fact
+Seems like Hydro has less variations than the other two, let's proceed to statistically test this fact
 
 Observed statistic:
 ```{r}
@@ -845,13 +843,51 @@ p_val
 So here we have statistical evidence that the three main renewable sources have not the same distribution in terms of total generated electricity.
 
 We can further investigate whether Solar and Wind are equally distributed (i.e. developing at the same rate) or not.
+```{r}
+wind.mean = colMeans(use_wind_elec.diff[4:40,])
+solar.mean = colMeans(use_solar_elec.diff[4:40,])
+years_04_19=as.numeric(colnames(use_wind_elec)) #years from 2004 to 2019
+years_05_19=years_04_19[-1]
 
-We'll exploit local testing of this hypothesis, to (in case of rejection) directly obtain the time instant in which the developments are different
+matplot(years_05_19,t(rbind(wind.mean,solar.mean)), type='l', col=c("green","red"), lty=1,xlab="Year",ylab="Gigawatt-hour",main="Mean electricity production")
+legend("topleft",legend=c("Wind","Solar"),col=c(3,2),pch=1)
+```
+
 
 ```{r}
-#REVIEW
-loc_test=IWT2(as.matrix(use_solar_elec.diff),as.matrix(use_wind_elec.diff))
-plot(loc_test,main="Solar and Wind",col=c(2,3))
+n1 = n2=dim(use_wind_elec.diff[4:40,])[1]
+n  = n1 + n2
+
+T20 = as.numeric((wind.mean-solar.mean) %*% (wind.mean-solar.mean))
+T20
+
+# Estimating the permutational distribution under H0
+
+T2 = numeric(B)
+set.seed(seed)
+t_pooled = rbind(use_wind_elec.diff[4:40,],use_solar_elec.diff[4:40,])
+
+for(perm in 1:B){
+  # Random permutation of indexes
+  permutation = sample(n)
+  t_perm = t_pooled[permutation,]
+  t1_perm = t_perm[1:n1,]
+  t2_perm = t_perm[(n1+1):n,]
+  
+  # Evaluation of the test statistic on permuted data
+  t1.mean_perm = colMeans(t1_perm)
+  t2.mean_perm = colMeans(t2_perm)
+  T2[perm]  = (t1.mean_perm-t2.mean_perm) %*% (t1.mean_perm-t2.mean_perm) 
+}
+
+hist(T2,xlim=range(c(T2,T20)),main="Squared L2 norm of means difference - permutational distribution")
+abline(v=T20,col=3,lwd=4)
+
+plot(ecdf(T2),main="Squared L2 norm of means difference - permutational ecdf")
+abline(v=T20,col=3,lwd=4)
+
+pvalue=sum(T2>=T20)/B
+pvalue
 ```
 
 
@@ -865,6 +901,195 @@ The three conformal models will be:
 For this purpose, we will first have to import the SSP data from our dataset, which was obtained by retrieving the year to year values from the original data (more details in "src/preprocessing_SSP.Rmd").
 We will also calculate the differences year to year.
 
+# SSP year to year smoothing
+
+From the SSP database we can obtain 5 year intervals of GDP & population levels. In our case we must obtain the year to year levels.
+
+With this purpose we will assume the data is smooth (as seen in the original SSP paper) and extract the year to year data through a b-spline basis for each country.
+
+First, some preprocessing must be done from the original dataset:
+```{r}
+library(openxlsx)
+library(fda)
+
+ssp  <- read.xlsx("data/ssp_iiasa.xlsx",sheet=1)
+ 
+north_europe <- c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
+
+east_europe <- c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
+
+south_europe <- c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
+
+central_europe <- c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
+
+# other EU countries
+other_europe     <- c("Montenegro", "Albania", "Bosnia and Herzegovina","Moldova")
+
+
+ssp_clean_cols <- ssp[,c("SCENARIO","REGION","VARIABLE","UNIT","2010","2015",
+                         "2020","2025","2030","2035","2040","2045","2050","2055",
+                         "2060","2065","2070","2075","2080","2085","2090","2095",
+                         "2100" )]   
+
+country_codes <- data.frame(c(north_europe,east_europe,south_europe,central_europe, other_europe),
+                            c("DNK","EST","LVA","LTU","FIN","SWE","NOR","ISL","GBR","IRL", 
+                              "BGR","CZE","HUN","POL","ROU","SVK","TUR","UKR",
+                              "GRC","ESP","ITA","CYP","MLT","PRT","HRV","SVN","MKD","ALB","SRB",
+                              "FRA","BEL","DEU","LUX","NLD","AUT","MNE","ALB","BIH","MDA"))
+
+colnames(country_codes) <- c("Name","Code")
+
+country_name2code <- function(code="",name=""){
+    # Returns name and code for a given name or code
+    if(nchar(name)>1)
+        return(country_codes[country_codes["Name"] == name][2]) #return code
+    else if(nchar(code)>1)
+        return(country_codes[country_codes["Code"] == code][1]) #return name
+} 
+
+ssp_clean_cols[,-1:-4] <- lapply(ssp_clean_cols[,-1:-4], as.numeric) # transform data into numeric
+ssp_clean_cols[,"REGION"] <- sapply(ssp_clean_cols[,"REGION"], country_name2code) # Use country names
+
+ssp_eu <- ssp_clean_cols[!is.na(ssp_clean_cols$REGION),] # Discard countries with Na values
+
+```
+
+Let us separate the data for GDP and Population.
+```{r}
+# Divide GDP and Population datasets
+ssp_gdp <- ssp_eu[ssp_eu$VARIABLE=="GDP|PPP",] 
+ssp_pop <- ssp_eu[ssp_eu$VARIABLE=="Population",]
+
+```
+
+Next, a double loop must be done for each country (and for each dataset) and within  each ocuntry, for each SSP scenario.
+
+```{r}
+ssp.year.grid <- seq(2010,2100,5)
+
+ssp.year.grid.str <-c("2010","2015","2020","2025","2030","2035","2040","2045","2050","2055",
+                      "2060","2065","2070","2075","2080","2085","2090","2095","2100")
+
+# Create empty df to populate
+new.ssp_gdp <- data.frame(matrix(ncol = 4+length(2010:2100), nrow = 0))
+new.ssp_pop <- data.frame(matrix(ncol = 4+length(2010:2100), nrow = 0))
+
+for(ssp.var.idx in 1:2){
+    if(ssp.var.idx == 1)
+        ssp_ <- ssp_gdp
+    else
+        ssp_ <- ssp_pop
+    
+    for(sspX in unique(ssp_$SCENARIO)){  # For each scenario
+        ssp_sspX <- ssp_[ssp_$SCENARIO==sspX,]
+        for(c in 1:length(ssp_sspX$REGION)){ # For each country
+            
+            ssp_sspX.data <- as.numeric(ssp_sspX[c,ssp.year.grid.str])
+            
+            # With roahd
+            # f_data <- fData(ssp.year.grid, ssp_sspX[,ssp.year.grid.str])
+            # plot(f_data)
+            
+            times_basis <-ssp.year.grid 
+            knots    <- c(ssp.year.grid) #Location of knots
+            n_knots   <- length(knots) #Number of knots
+            n_order   <- 2 # order of basis functions: cubic bspline: order = 3 + 1
+            n_basis   <- length(knots) + n_order - 2;
+            
+            basis <- create.bspline.basis(c(min(times_basis),max(times_basis)),n_basis,n_order,knots)
+            # plot(basis)
+            
+            ys <- smooth.basis(argvals=times_basis, y=ssp_sspX.data, fdParobj = basis)
+            
+            xfd <- ys$fd
+            # plotfit.fd(ssp_sspX.data, times_basis, xfd) #  Plot the curve along with the data
+            
+            ssp_sspX.yby <- eval.fd(seq(2010,2100,1), xfd) # Obtain data year by year
+            
+            # plot(seq(2010,2100,1), ssp_ssp1.yby)
+            if(ssp.var.idx == 1)
+                new.ssp_gdp <- rbind(new.ssp_gdp, c(sspX, ssp_sspX$REGION[c],
+                                                 unique(ssp_$VARIABLE)[1],
+                                                 unique(ssp_$UNIT)[1],
+                                                 ssp_sspX.yby))
+            else
+                new.ssp_pop <- rbind(new.ssp_pop, c(sspX, ssp_sspX$REGION[c],
+                                                 unique(ssp_$VARIABLE)[1],
+                                                 unique(ssp_$UNIT)[1],
+                                                 ssp_sspX.yby))
+        }
+    }
+}
+# rename columns
+colnames(new.ssp_gdp) <- c(colnames(ssp_gdp[,1:4]), 2010:2100)    
+colnames(new.ssp_pop) <- c(colnames(ssp_pop[,1:4]), 2010:2100)
+```
+
+
+
+Now we must complete with real values from years previous to the predictions done in the SSP (1990-2010):  
+```{r}
+# Auxiliary function to convert 2005 dollars to current dollars
+to_current_dollars <- function(dollars_2005){
+    return(1.37*as.numeric(dollars_2005)) # us bureau of labour statistics (Jan 2005-Jan 2021)
+    # return(1.46*dollars_2005) # us bureau of labour statistics (Jan 2005-Dec 2021)
+}
+
+# World bank data 
+prev.gdp <- read.xlsx("data/UN_GDP_1990-2021.xlsx") # https://data.worldbank.org/indicator/NY.GDP.MKTP.PP.CD?end=2020&locations=EU&start=1990
+prev.pop <- read.xlsx("data/UN_Population_1990-2021.xlsx") # https://data.worldbank.org/indicator/SP.POP.TOTL?locations=EU
+
+# Get only 27 eu countries
+prev.gdp <- prev.gdp[prev.gdp$Country.Code %in% country_codes$Code,]
+prev.pop <- prev.pop[prev.pop$Country.Code %in% country_codes$Code,]
+
+# GDP to billions + population to million
+prev.gdp[,c(-1,-2,-3)] <- prev.gdp[,c(-1,-2,-3)]/1000000000
+prev.pop[,c(-1,-2,-3)] <- prev.pop[,c(-1,-2,-3)]/1000000
+
+# Use country names
+prev.gdp[,"Country.Name"] <- sapply(prev.gdp[,"Country.Code"], country_name2code) 
+prev.pop[,"Country.Name"] <- sapply(prev.pop[,"Country.Code"], country_name2code) 
+# Only use countries present in current our Data 
+prev.gdp <- prev.gdp[prev.gdp$Country.Name %in% unique(new.ssp_gdp$REGION),]
+prev.pop <- prev.pop[prev.pop$Country.Name %in% unique(new.ssp_pop$REGION),]
+```
+
+Both datasets should be joined together, assuming SSP2 as the most possible scenario ("[...] moderate challenges of both kinds and is intended to represent a future in which development trends are not extreme in either of the dimensions, [...]"), but other more extreme scenarios could be explored: "The central case is not meant to be more likely than any of the other storylines or pathways. In fact, historical development of GHG emissions has often followed trajectories close to the upper bound of the range of earlier emissions scenarios, such as those from SRES":
+```{r}
+# Select scenario
+new.ssp_gdp.ssp.2 <- new.ssp_gdp[new.ssp_gdp == "SSP2",]
+
+new.ssp_pop.ssp.2 <- new.ssp_pop[new.ssp_pop == "SSP2",]
+
+# First we need to transform the SSP GDP data to current dollars + select regions in our data
+new.ssp_gdp.ssp.2[,c(-1,-2,-3, -4)] <- lapply(new.ssp_gdp.ssp.2[,c(-1,-2,-3, -4)], to_current_dollars)
+new.ssp_gdp.ssp.2 <- new.ssp_gdp.ssp.2[order(new.ssp_gdp.ssp.2$REGION),] # Sort by Country code
+
+new.ssp_pop.ssp.2 <- new.ssp_pop.ssp.2[order(new.ssp_pop.ssp.2$REGION),] # Sort by Country code
+
+```
+
+
+Combine both datasets
+```{r}
+comb.gdp <- cbind(new.ssp_gdp.ssp.2[,c(1,2,3)],
+                  UNIT=rep("Current International $", dim(new.ssp_gdp.ssp.2)[1]),
+                  prev.gdp[,4:23],
+                  new.ssp_gdp.ssp.2[,c(-1,-2,-3,-4)])
+
+
+comb.pop <- cbind(new.ssp_pop.ssp.2[,c(1,2,3)],
+                  UNIT=rep("Current International $", dim(new.ssp_pop.ssp.2)[1]),
+                  prev.pop[,4:23],
+                  new.ssp_pop.ssp.2[,c(-1,-2,-3,-4)])
+```
+
+```{r}
+write.xlsx(comb.gdp, "data/ssp_iiasa_YtY_gdp.xlsx", overwrite = T)
+write.xlsx(comb.pop, "data/ssp_iiasa_YtY_pop.xlsx", overwrite = T)
+```
+
 ```{r}
 gdp <- read.xlsx("data/ssp_iiasa_YtY_gdp.xlsx", 1)
 pop <- read.xlsx("data/ssp_iiasa_YtY_pop.xlsx", 1)
@@ -875,8 +1100,8 @@ pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
 rownames(gdp.diff) <- gdp$REGION
 rownames(pop.diff) <- pop$REGION
 
-gdp.diff <- gdp.diff[,-length(gdp.diff)] - gdp.diff[,-1]
-pop.diff <- pop.diff[,-length(pop.diff)] - pop.diff[,-1]
+gdp.diff <- gdp.diff[,-1] - gdp.diff[,-length(gdp.diff)]
+pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
 
 colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
 colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
@@ -908,8 +1133,8 @@ gdp.diff <- gdp.diff[rn,]
 pop.diff <- pop.diff[rn,]
 
 use_solar_elec.diff.c <- use_solar_elec.diff.c[rn,]
-use_wind_elec.diff.c <- use_solar_elec.diff.c[rn,]
-use_hydro_elec.diff.c <- use_solar_elec.diff.c[rn,]
+use_wind_elec.diff.c <- use_wind_elec.diff.c[rn,]
+use_hydro_elec.diff.c <- use_hydro_elec.diff.c[rn,]
 
 
 ```
@@ -926,7 +1151,7 @@ pop.elec.pred  <- pop.diff[,as.character(seq(2020,2030))]
 
 ```
 
-REVIEW: Create dummy variables for countries with One Hot Encoding?
+Create dummy variables for countries (simply a numerical sequence) to deal with national production dependence ("Country Effect")
 
 ```{r}
 dummy.country <- seq(1,dim(gdp.diff)[1])
@@ -952,15 +1177,19 @@ colnames(vec_test) <- c("gdp","pop","country")
 vec_solar <- gather(use_solar_elec.diff.c,year,y)[,-1]
 vec_hydro <- gather(use_hydro_elec.diff.c,year,y)[,-1]
 vec_wind <- gather(use_wind_elec.diff.c,year,y)[,-1]
+#vec_train$country=factor(vec_train$country)
+
 ```
 
+Creation of models for train and for predictions, according to:
+https://fromthebottomoftheheap.net/2021/02/02/random-effects-in-gams/
 
 ```{r}
 
 train_gam <- function(x,y,out=NULL){
     colnames(x)=c("gdp", "pop", "country")
     train_data=data.frame(y,x)
-    model_gam=gam(y ~ s(gdp,country,bs='re') + s(pop,country,bs='re'), data=train_data)
+    model_gam=gam(y ~ s(country,gdp,bs='re') + s(country,pop,bs='re'), data=train_data)
 }
 
 
@@ -974,27 +1203,8 @@ predict_gam <- function(obj, new_x){
 
 
 ```{r}
-
-c_preds.solar <- conformal.pred(
-    vec_train, 
-    vec_solar,
-    as.matrix(vec_test),
-    alpha=0.05, 
-    verbose=T, 
-    train.fun = train_gam, 
-    predict.fun = predict_gam)
-
-c_preds.hydro <- conformal.pred(
-    vec_train, 
-    vec_hydro,
-    as.matrix(vec_test),
-    alpha=0.05, 
-    verbose=T, 
-    train.fun = train_gam, 
-    predict.fun = predict_gam)
-
 c_preds.wind <- conformal.pred(
-    vec_train, 
+    as.matrix(vec_train), 
     vec_wind,
     as.matrix(vec_test),
     alpha=0.05, 
@@ -1002,7 +1212,23 @@ c_preds.wind <- conformal.pred(
     train.fun = train_gam, 
     predict.fun = predict_gam)
 
-c_preds_solar
+#c_preds.solar <- conformal.pred(
+    #as.matrix(vec_train), 
+    #vec_solar,
+    #as.matrix(vec_test),
+    #alpha=0.05, 
+    #verbose=T, 
+    #train.fun = train_gam, 
+    #predict.fun = predict_gam)
+
+#c_preds.hydro <- conformal.pred(
+    #as.matrix(vec_train), 
+    #vec_hydro,
+    #as.matrix(vec_test),
+    #alpha=0.05, 
+    #verbose=T, 
+    #train.fun = train_gam, 
+    #predict.fun = predict_gam)
 ```
 
 Plot predictions 2020-2030:
@@ -1014,7 +1240,7 @@ matlines(rep(seq(2020,2030),34),c_preds.solar$up,lwd =1, col =" blue",lty =3)
 matlines(rep(seq(2020,2030),34),c_preds.solar$lo, lwd =1, col =" blue",lty =3)
 ```
 ```{r}
-with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use'))
+with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(-2000,15000)))
 
 lines(rep(seq(2020,2030),34),c_preds.wind$pred,lwd =2, col ="green",lty=3)
 matlines(rep(seq(2020,2030),34),c_preds.wind$up,lwd =1, col =" blue",lty =3)
@@ -1033,7 +1259,7 @@ matlines(rep(seq(2020,2030),34),c_preds.hydro$lo, lwd =1, col =" blue",lty =3)
 
 ### Regression on european electricity capacity
 
-Let's make a step regression on total European values
+REVIEW: IS IT NECESSARY TO KEEP THIS? Let's make a step regression on total European values
 
 ```{r}
 x=as.numeric(colnames(use_renew_elec)) #years from 2004 to 2019
@@ -1155,7 +1381,7 @@ east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turk
 
 south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
 
-central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
+central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria") #TODO: change Germany name
 
 length(countries)==length(c(north_europe,south_europe,east_europe,central_europe))  #just to see correct division
 ```
@@ -1362,8 +1588,8 @@ pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
 rownames(gdp.diff) <- gdp$REGION
 rownames(pop.diff) <- pop$REGION
 
-gdp.diff <- gdp.diff[,-length(gdp.diff)] - gdp.diff[,-1]
-pop.diff <- pop.diff[,-length(pop.diff)] - pop.diff[,-1]
+gdp.diff <- gdp.diff[,-1] - gdp.diff[,-length(gdp.diff)]
+pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
 
 colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
 colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
@@ -1376,39 +1602,32 @@ discard.idx <- rownames(consump.oil.petr.diff[-c(1,2,3),])%in%rownames(gdp.diff)
 discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
 
 # We discard the countries which are not going to be used, as well as the EU totals 
-consump.oil.petr.diff.c <- consump.oil.petr.diff[c(F,F,F,discard.idx),]
-consump.gas.diff.c <- consump.gas.diff[c(F,F,F,discard.idx),]
-consump.fossils.diff.c <- consump.fossils.diff[c(F,F,F,discard.idx),]
-consump.renew.diff.c <- consump.renew.diff[c(F,F,F,discard.idx),]
+consump.oil.petr.diff.c <- consump.oil.petr.diff[3,]
+consump.gas.diff.c <- consump.gas.diff[3,]
+consump.fossils.diff.c <- consump.fossils.diff[3,]
+consump.renew.diff.c <- consump.renew.diff[3,]
 
 pop.diff <- pop.diff[discard.pop.idx,]
 
 # Not in SSP GDP data and in EUstat data
-discard.gdp.idx <- rownames(gdp.diff)%in%rownames(consump.oil.petr.diff.c)
-discard.pop.idx <- rownames(pop.diff)%in%rownames(consump.oil.petr.diff.c)
+discard.gdp.idx <- rownames(gdp.diff)%in%rownames(consump.oil.petr.diff)
+discard.pop.idx <- rownames(pop.diff)%in%rownames(consump.oil.petr.diff)
 
 gdp.diff <- gdp.diff[discard.gdp.idx,]
 pop.diff <- pop.diff[discard.pop.idx,]
 
-
-rn <- rownames(gdp.diff)
-gdp.diff <- gdp.diff[rn,]
-pop.diff <- pop.diff[rn,]
-
-consump.oil.petr.diff.c <- consump.oil.petr.diff.c[rn,]
-consump.gas.diff.c <- consump.gas.diff.c[rn,]
-consump.fossils.diff.c <- consump.fossils.diff.c[rn,]
-consump.renew.diff.c <- consump.renew.diff.c[rn,]
+gdp.diff.total<-as.numeric(colSums(gdp.diff,na.rm=T))[1:40] #we have data until 2100,                                                               so we keep only until 2030
+pop.diff.total<-as.numeric(colSums(pop.diff,na.rm=T))[1:40]
 
 ```
 
 
 ```{r}
-gdp.train <- gdp.diff[,as.character(seq(1991,2019))]
-pop.train <- pop.diff[,as.character(seq(1991,2019))]
+gdp.train <- gdp.diff.total[1:29]
+pop.train <- pop.diff.total[1:29]
 
-gdp.pred  <- gdp.diff[,as.character(seq(2020,2030))]
-pop.pred  <- pop.diff[,as.character(seq(2020,2030))]
+gdp.pred  <- gdp.diff.total[30:40]
+pop.pred  <- pop.diff.total[30:40]
 ```
 
 
@@ -1422,39 +1641,41 @@ Includes three models, one for each non-renewable energy:
 ```{r}
 # REVIEW: take into account country dummy variable??
 
-vec_train <- cbind(gdp.train[,1], pop.train[,1])
-for (j in 2:29){
-    v <- cbind(gdp.train[,j], pop.train[,j])
-    vec_train <- rbind(vec_train,v)
-}
-vec_train <- data.frame(vec_train)
-colnames(vec_train) <- c("gdp","pop")
+vec_oil <- t(rbind(consump.oil.petr.diff.c,gdp.train,pop.train))
+vec_oil <- data.frame(vec_oil)
+colnames(vec_oil) <- c("dif_oil_eu","dif_gdp_eu","dif_pop_eu")
 
 
-vec_test <- cbind(gdp.pred[,1], pop.pred[,1])
-for (j in 2:11){
-    v <- cbind(gdp.pred[,j], pop.pred[,j])
-    vec_test <- rbind(vec_test,v)
-}
-vec_test <- data.frame(vec_test)
-colnames(vec_test) <- c("gdp","pop")
+vec_oil_pred <- cbind(gdp.pred, pop.pred)
+vec_oil_pred <- data.frame(vec_oil_pred)
 
-vec_oil <- gather(consump.oil.petr.diff.c,year,y)[,-1]
-vec_fos <- gather(consump.fossils.diff.c,year,y)[,-1]
-vec_gas <- gather(consump.gas.diff.c,year,y)[,-1]
+colnames(vec_oil_pred) <- c("dif_gdp_eu","dif_pop_eu")
+
+vec_fossil <- t(rbind(consump.fossils.diff.c,gdp.train, pop.train))
+vec_fossil <- data.frame(vec_fossil)
+colnames(vec_fossil) <- c("dif_fossil_eu","dif_gdp_eu","dif_pop_eu")
 
 
-vec_oil.train <- cbind(vec_oil=vec_oil[1:dim(vec_train)[1]], vec_train)
-vec_fos.train <- cbind(vec_fos=vec_fos[1:dim(vec_train)[1]], vec_train)
-vec_gas.train <- cbind(vec_gas=vec_gas[1:dim(vec_train)[1]], vec_train)
+vec_fossil_pred <- cbind(gdp.pred, pop.pred)
+vec_fossil_pred <- data.frame(vec_fossil_pred)
+
+colnames(vec_fossil_pred) <- c("dif_gdp_eu","dif_pop_eu")
+
+vec_gas <- t(rbind(consump.gas.diff.c,gdp.train, pop.train))
+vec_gas <- data.frame(vec_gas)
+colnames(vec_gas) <- c("dif_gas_eu","dif_gdp_eu","dif_pop_eu")
+
+
+vec_gas_pred=vec_fossil_pred
+
 ```
 
 
 
 Oil & Petr.
 ```{r}
-consump.oil.petr.gam <- gam(vec_oil ~ s(gdp,bs="re") + s(pop,bs="re"),
-                           data = vec_oil.train) 
+consump.oil.petr.gam <- gam(dif_oil_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
+                           data = vec_oil) 
 summary(consump.oil.petr.gam)
 
 hist(consump.oil.petr.gam$residuals)
@@ -1464,8 +1685,8 @@ shapiro.test(consump.oil.petr.gam$residuals)
 
 Fossils:
 ```{r}
-consump.fossils.gam <- gam(vec_fos ~ s(gdp,bs="re") + s(pop,bs="re"),
-                           data = vec_fos.train) 
+consump.fossils.gam <- gam(dif_fossil_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
+                           data = vec_fossil) 
 summary(consump.fossils.gam)
 
 hist(consump.fossils.gam$residuals)
@@ -1475,8 +1696,8 @@ shapiro.test(consump.fossils.gam$residuals)
 
 Natural gas:
 ```{r}
-consump.gas.gam <- gam(vec_gas ~ s(gdp,bs="re") + s(pop,bs="re"),
-                           data = vec_gas.train) 
+consump.gas.gam <- gam(dif_gas_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
+                           data = vec_gas) 
 summary(consump.gas.gam)
 
 hist(consump.gas.gam$residuals)
@@ -1488,25 +1709,25 @@ Predict for 2020-2030
 ```{r}
 # Preds (2020-2030)
 
-consump.oil.petr.gam.preds <- predict(consump.oil.petr.gam, newdata=vec_test, se=T)
+consump.oil.petr.gam.preds <- predict(consump.oil.petr.gam, newdata=vec_oil_pred, se=T)
 
-consump.fossils.gam.preds <- predict(consump.fossils.gam, newdata=vec_test, se=T)
+consump.fossils.gam.preds <- predict(consump.fossils.gam, newdata=vec_fossil_pred, se=T)
 
-consump.gas.gam.preds <- predict(consump.gas.gam, newdata=vec_test, se=T)
+consump.gas.gam.preds <- predict(consump.gas.gam, newdata=vec_gas_pred, se=T)
 ```
 
 Plot predictions
 ```{r}
 
 # See graphs
-with(vec_oil.train, plot(rep(seq(1991,2019),34) ,vec_oil ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
-points(rep(seq(2020,2030),34), consump.oil.petr.gam.preds$fit ,lwd =2, col ="red")
+with(vec_oil, plot(seq(1991,2019) ,dif_oil_eu ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
+points(seq(2020,2030), consump.oil.petr.gam.preds$fit ,lwd =2, col ="red")
 
-with(vec_fos.train, plot(rep(seq(1991,2019),34) ,vec_fos ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Fossil fules.'))
-points(rep(seq(2020,2030),34), consump.fossils.gam.preds$fit ,lwd =2, col ="red")
+with(vec_fossil, plot(seq(1991,2019) ,dif_fossil_eu ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Fossil fules.'))
+points(seq(2020,2030), consump.fossils.gam.preds$fit ,lwd =2, col ="red")
 
-with(vec_gas.train, plot(rep(seq(1991,2019),34) ,vec_gas ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Natural Gas'))
-points(rep(seq(2020,2030),34), consump.gas.gam.preds$fit ,lwd =2, col ="red")
+with(vec_gas, plot(seq(1991,2019) ,dif_gas_eu ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Natural Gas'))
+points(seq(2020,2030), consump.gas.gam.preds$fit ,lwd =2, col ="red")
 
 ```
 
