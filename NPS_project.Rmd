@@ -926,7 +926,7 @@ pop.elec.pred  <- pop.diff[,as.character(seq(2020,2030))]
 
 ```
 
-REVIEW: Create dummy variables for countries
+REVIEW: Create dummy variables for countries with One Hot Encoding?
 
 ```{r}
 dummy.country <- seq(1,dim(gdp.diff)[1])
