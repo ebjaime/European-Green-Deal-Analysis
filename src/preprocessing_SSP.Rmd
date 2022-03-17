@@ -20,7 +20,7 @@ First, some preprocessing must be done from the original dataset:
 library(openxlsx)
 library(fda)
 
-ssp  <- read.xlsx("../data/ssp_iiasa.xlsx",sheet=1) # Gross available energy, first sheet should be the best, even if in the presentation we chose the fourth
+ssp  <- read.xlsx("data/ssp_iiasa.xlsx",sheet=1) # Gross available energy, first sheet should be the best, even if in the presentation we chose the fourth
  
 north_europe <- c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
@@ -149,8 +149,8 @@ to_current_dollars <- function(dollars_2005){
 }
 
 # World bank data 
-prev.gdp <- read.xlsx("../data/UN_GDP_1990-2021.xlsx") # https://data.worldbank.org/indicator/NY.GDP.MKTP.PP.CD?end=2020&locations=EU&start=1990
-prev.pop <- read.xlsx("../data/UN_Population_1990-2021.xlsx") # https://data.worldbank.org/indicator/SP.POP.TOTL?locations=EU
+prev.gdp <- read.xlsx("data/UN_GDP_1990-2021.xlsx") # https://data.worldbank.org/indicator/NY.GDP.MKTP.PP.CD?end=2020&locations=EU&start=1990
+prev.pop <- read.xlsx("data/UN_Population_1990-2021.xlsx") # https://data.worldbank.org/indicator/SP.POP.TOTL?locations=EU
 
 # Get only 27 eu countries
 prev.gdp <- prev.gdp[prev.gdp$Country.Code %in% country_codes$Code,]
@@ -186,21 +186,21 @@ new.ssp_pop.ssp.2 <- new.ssp_pop.ssp.2[order(new.ssp_pop.ssp.2$REGION),] # Sort 
 
 Combine both datasets
 ```{r}
-comb.gdp <- cbind(new.ssp_gdp.ssp.2[,c(1,2,3)],
-                  UNIT=rep("Current International $", dim(new.ssp_gdp.ssp.2)[1]),
-                  prev.gdp[,4:23],
+comb.gdp <- cbind(UNIT=rep("Current International $",
+                  dim(new.ssp_gdp.ssp.2)[1]),
+                  prev.gdp[,],
                   new.ssp_gdp.ssp.2[,c(-1,-2,-3,-4)])
 
 
-comb.pop <- cbind(new.ssp_pop.ssp.2[,c(1,2,3)],
+comb.pop <- cbind(
                   UNIT=rep("Current International $", dim(new.ssp_pop.ssp.2)[1]),
-                  prev.pop[,4:23],
+                  prev.pop[,],
                   new.ssp_pop.ssp.2[,c(-1,-2,-3,-4)])
 ```
 
 ```{r}
-write.xlsx(comb.gdp, "../data/ssp_iiasa_YtY_gdp.xlsx", overwrite = T)
-write.xlsx(comb.pop, "../data/ssp_iiasa_YtY_pop.xlsx", overwrite = T)
+write.xlsx(comb.gdp, "data/ssp_iiasa_YtY_gdp.xlsx", overwrite = T)
+write.xlsx(comb.pop, "data/ssp_iiasa_YtY_pop.xlsx", overwrite = T)
 ```
 
 
