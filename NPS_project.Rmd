@@ -37,6 +37,7 @@ library(corrplot)
 library(mgcv)
 # Conformal
 library(conformalInference)
+library(forecast)
 
 
 B=10000
@@ -178,14 +179,19 @@ year.min       <- min(energy.balances.p[1,])
 year.max       <- max(energy.balances.p[1,])
 year.grid      <- seq(year.min, year.max)
 
-countries.list <- rownames(consump.fossils.p[-c(1,2,3,4),]) 
+countries.list <- rownames(consump.fossils.p[-c(1,2,3,4),])
 
-# Construct datsets without total European values 
+# Construct datasets without total European values 
 energy.balances.countries  <- energy.balances.p[-c(1,2,3,4),]
 consump.fossils.countries  <- consump.fossils.p[-c(1,2,3,4),]
 consump.oil.petr.countries <- consump.oil.petr.p[-c(1,2,3,4),]
 consump.gas.countries      <- consump.gas.p[-c(1,2,3,4),]
 consump.renew.countries    <- consump.renew.p[-c(1,2,3,4),]
+
+consump.oil.petr.europe <- consump.oil.petr.p[3,]
+consump.gas.europe <- consump.gas.p[3,]
+consump.fossils.europe <- consump.fossils.p[3,]
+consump.renew.europe <- consump.renew.p[3,]
 
 colnames(energy.balances.countries) <- NULL
 colnames(consump.fossils.countries) <- NULL
@@ -901,194 +907,6 @@ The three conformal models will be:
 For this purpose, we will first have to import the SSP data from our dataset, which was obtained by retrieving the year to year values from the original data (more details in "src/preprocessing_SSP.Rmd").
 We will also calculate the differences year to year.
 
-# SSP year to year smoothing
-
-From the SSP database we can obtain 5 year intervals of GDP & population levels. In our case we must obtain the year to year levels.
-
-With this purpose we will assume the data is smooth (as seen in the original SSP paper) and extract the year to year data through a b-spline basis for each country.
-
-First, some preprocessing must be done from the original dataset:
-```{r}
-library(openxlsx)
-library(fda)
-
-ssp  <- read.xlsx("data/ssp_iiasa.xlsx",sheet=1)
- 
-north_europe <- c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
-
-east_europe <- c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
-
-south_europe <- c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
-
-central_europe <- c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
-
-# other EU countries
-other_europe     <- c("Montenegro", "Albania", "Bosnia and Herzegovina","Moldova")
-
-
-ssp_clean_cols <- ssp[,c("SCENARIO","REGION","VARIABLE","UNIT","2010","2015",
-                         "2020","2025","2030","2035","2040","2045","2050","2055",
-                         "2060","2065","2070","2075","2080","2085","2090","2095",
-                         "2100" )]   
-
-country_codes <- data.frame(c(north_europe,east_europe,south_europe,central_europe, other_europe),
-                            c("DNK","EST","LVA","LTU","FIN","SWE","NOR","ISL","GBR","IRL", 
-                              "BGR","CZE","HUN","POL","ROU","SVK","TUR","UKR",
-                              "GRC","ESP","ITA","CYP","MLT","PRT","HRV","SVN","MKD","ALB","SRB",
-                              "FRA","BEL","DEU","LUX","NLD","AUT","MNE","ALB","BIH","MDA"))
-
-colnames(country_codes) <- c("Name","Code")
-
-country_name2code <- function(code="",name=""){
-    # Returns name and code for a given name or code
-    if(nchar(name)>1)
-        return(country_codes[country_codes["Name"] == name][2]) #return code
-    else if(nchar(code)>1)
-        return(country_codes[country_codes["Code"] == code][1]) #return name
-} 
-
-ssp_clean_cols[,-1:-4] <- lapply(ssp_clean_cols[,-1:-4], as.numeric) # transform data into numeric
-ssp_clean_cols[,"REGION"] <- sapply(ssp_clean_cols[,"REGION"], country_name2code) # Use country names
-
-ssp_eu <- ssp_clean_cols[!is.na(ssp_clean_cols$REGION),] # Discard countries with Na values
-
-```
-
-Let us separate the data for GDP and Population.
-```{r}
-# Divide GDP and Population datasets
-ssp_gdp <- ssp_eu[ssp_eu$VARIABLE=="GDP|PPP",] 
-ssp_pop <- ssp_eu[ssp_eu$VARIABLE=="Population",]
-
-```
-
-Next, a double loop must be done for each country (and for each dataset) and within  each ocuntry, for each SSP scenario.
-
-```{r}
-ssp.year.grid <- seq(2010,2100,5)
-
-ssp.year.grid.str <-c("2010","2015","2020","2025","2030","2035","2040","2045","2050","2055",
-                      "2060","2065","2070","2075","2080","2085","2090","2095","2100")
-
-# Create empty df to populate
-new.ssp_gdp <- data.frame(matrix(ncol = 4+length(2010:2100), nrow = 0))
-new.ssp_pop <- data.frame(matrix(ncol = 4+length(2010:2100), nrow = 0))
-
-for(ssp.var.idx in 1:2){
-    if(ssp.var.idx == 1)
-        ssp_ <- ssp_gdp
-    else
-        ssp_ <- ssp_pop
-    
-    for(sspX in unique(ssp_$SCENARIO)){  # For each scenario
-        ssp_sspX <- ssp_[ssp_$SCENARIO==sspX,]
-        for(c in 1:length(ssp_sspX$REGION)){ # For each country
-            
-            ssp_sspX.data <- as.numeric(ssp_sspX[c,ssp.year.grid.str])
-            
-            # With roahd
-            # f_data <- fData(ssp.year.grid, ssp_sspX[,ssp.year.grid.str])
-            # plot(f_data)
-            
-            times_basis <-ssp.year.grid 
-            knots    <- c(ssp.year.grid) #Location of knots
-            n_knots   <- length(knots) #Number of knots
-            n_order   <- 2 # order of basis functions: cubic bspline: order = 3 + 1
-            n_basis   <- length(knots) + n_order - 2;
-            
-            basis <- create.bspline.basis(c(min(times_basis),max(times_basis)),n_basis,n_order,knots)
-            # plot(basis)
-            
-            ys <- smooth.basis(argvals=times_basis, y=ssp_sspX.data, fdParobj = basis)
-            
-            xfd <- ys$fd
-            # plotfit.fd(ssp_sspX.data, times_basis, xfd) #  Plot the curve along with the data
-            
-            ssp_sspX.yby <- eval.fd(seq(2010,2100,1), xfd) # Obtain data year by year
-            
-            # plot(seq(2010,2100,1), ssp_ssp1.yby)
-            if(ssp.var.idx == 1)
-                new.ssp_gdp <- rbind(new.ssp_gdp, c(sspX, ssp_sspX$REGION[c],
-                                                 unique(ssp_$VARIABLE)[1],
-                                                 unique(ssp_$UNIT)[1],
-                                                 ssp_sspX.yby))
-            else
-                new.ssp_pop <- rbind(new.ssp_pop, c(sspX, ssp_sspX$REGION[c],
-                                                 unique(ssp_$VARIABLE)[1],
-                                                 unique(ssp_$UNIT)[1],
-                                                 ssp_sspX.yby))
-        }
-    }
-}
-# rename columns
-colnames(new.ssp_gdp) <- c(colnames(ssp_gdp[,1:4]), 2010:2100)    
-colnames(new.ssp_pop) <- c(colnames(ssp_pop[,1:4]), 2010:2100)
-```
-
-
-
-Now we must complete with real values from years previous to the predictions done in the SSP (1990-2010):  
-```{r}
-# Auxiliary function to convert 2005 dollars to current dollars
-to_current_dollars <- function(dollars_2005){
-    return(1.37*as.numeric(dollars_2005)) # us bureau of labour statistics (Jan 2005-Jan 2021)
-    # return(1.46*dollars_2005) # us bureau of labour statistics (Jan 2005-Dec 2021)
-}
-
-# World bank data 
-prev.gdp <- read.xlsx("data/UN_GDP_1990-2021.xlsx") # https://data.worldbank.org/indicator/NY.GDP.MKTP.PP.CD?end=2020&locations=EU&start=1990
-prev.pop <- read.xlsx("data/UN_Population_1990-2021.xlsx") # https://data.worldbank.org/indicator/SP.POP.TOTL?locations=EU
-
-# Get only 27 eu countries
-prev.gdp <- prev.gdp[prev.gdp$Country.Code %in% country_codes$Code,]
-prev.pop <- prev.pop[prev.pop$Country.Code %in% country_codes$Code,]
-
-# GDP to billions + population to million
-prev.gdp[,c(-1,-2,-3)] <- prev.gdp[,c(-1,-2,-3)]/1000000000
-prev.pop[,c(-1,-2,-3)] <- prev.pop[,c(-1,-2,-3)]/1000000
-
-# Use country names
-prev.gdp[,"Country.Name"] <- sapply(prev.gdp[,"Country.Code"], country_name2code) 
-prev.pop[,"Country.Name"] <- sapply(prev.pop[,"Country.Code"], country_name2code) 
-# Only use countries present in current our Data 
-prev.gdp <- prev.gdp[prev.gdp$Country.Name %in% unique(new.ssp_gdp$REGION),]
-prev.pop <- prev.pop[prev.pop$Country.Name %in% unique(new.ssp_pop$REGION),]
-```
-
-Both datasets should be joined together, assuming SSP2 as the most possible scenario ("[...] moderate challenges of both kinds and is intended to represent a future in which development trends are not extreme in either of the dimensions, [...]"), but other more extreme scenarios could be explored: "The central case is not meant to be more likely than any of the other storylines or pathways. In fact, historical development of GHG emissions has often followed trajectories close to the upper bound of the range of earlier emissions scenarios, such as those from SRES":
-```{r}
-# Select scenario
-new.ssp_gdp.ssp.2 <- new.ssp_gdp[new.ssp_gdp == "SSP2",]
-
-new.ssp_pop.ssp.2 <- new.ssp_pop[new.ssp_pop == "SSP2",]
-
-# First we need to transform the SSP GDP data to current dollars + select regions in our data
-new.ssp_gdp.ssp.2[,c(-1,-2,-3, -4)] <- lapply(new.ssp_gdp.ssp.2[,c(-1,-2,-3, -4)], to_current_dollars)
-new.ssp_gdp.ssp.2 <- new.ssp_gdp.ssp.2[order(new.ssp_gdp.ssp.2$REGION),] # Sort by Country code
-
-new.ssp_pop.ssp.2 <- new.ssp_pop.ssp.2[order(new.ssp_pop.ssp.2$REGION),] # Sort by Country code
-
-```
-
-
-Combine both datasets
-```{r}
-comb.gdp <- cbind(new.ssp_gdp.ssp.2[,c(1,2,3)],
-                  UNIT=rep("Current International $", dim(new.ssp_gdp.ssp.2)[1]),
-                  prev.gdp[,4:23],
-                  new.ssp_gdp.ssp.2[,c(-1,-2,-3,-4)])
-
-
-comb.pop <- cbind(new.ssp_pop.ssp.2[,c(1,2,3)],
-                  UNIT=rep("Current International $", dim(new.ssp_pop.ssp.2)[1]),
-                  prev.pop[,4:23],
-                  new.ssp_pop.ssp.2[,c(-1,-2,-3,-4)])
-```
-
-```{r}
-write.xlsx(comb.gdp, "data/ssp_iiasa_YtY_gdp.xlsx", overwrite = T)
-write.xlsx(comb.pop, "data/ssp_iiasa_YtY_pop.xlsx", overwrite = T)
-```
 
 ```{r}
 gdp <- read.xlsx("data/ssp_iiasa_YtY_gdp.xlsx", 1)
@@ -1107,6 +925,11 @@ colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
 colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
 
 ```
+
+```{r}
+
+```
+
 
 ```{r}
 # Not in SSP GDP data and in electricity data
@@ -1585,8 +1408,8 @@ rownames(capacity_renew_fuels_nuclear)[which.max(capacity_renew_fuels_nuclear[4:
 gdp.diff <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
 pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
 
-rownames(gdp.diff) <- gdp$REGION
-rownames(pop.diff) <- pop$REGION
+rownames(gdp.diff) <- gdp$Country.Name
+rownames(pop.diff) <- pop$Country.Name
 
 gdp.diff <- gdp.diff[,-1] - gdp.diff[,-length(gdp.diff)]
 pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
@@ -1682,6 +1505,12 @@ hist(consump.oil.petr.gam$residuals)
 qqnorm(consump.oil.petr.gam$residuals)
 shapiro.test(consump.oil.petr.gam$residuals)
 ```
+```{r}
+Pacf(
+  consump.oil.petr.gam$residuals
+)
+```
+
 
 Fossils:
 ```{r}
@@ -1692,6 +1521,11 @@ summary(consump.fossils.gam)
 hist(consump.fossils.gam$residuals)
 qqnorm(consump.fossils.gam$residuals)
 shapiro.test(consump.fossils.gam$residuals)
+```
+```{r}
+Pacf(
+  consump.fossils.gam$residuals
+)
 ```
 
 Natural gas:
@@ -1704,6 +1538,14 @@ hist(consump.gas.gam$residuals)
 qqnorm(consump.gas.gam$residuals)
 shapiro.test(consump.gas.gam$residuals)
 ```
+
+```{r}
+Pacf(
+  consump.gas.gam$residuals
+)
+```
+
+
 
 Predict for 2020-2030
 ```{r}

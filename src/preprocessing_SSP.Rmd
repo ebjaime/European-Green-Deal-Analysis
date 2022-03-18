@@ -186,16 +186,21 @@ new.ssp_pop.ssp.2 <- new.ssp_pop.ssp.2[order(new.ssp_pop.ssp.2$REGION),] # Sort 
 
 Combine both datasets
 ```{r}
+ord1=order(prev.gdp$Country.Name)
+ord2=order(new.ssp_gdp.ssp.2$REGION)
+
+
 comb.gdp <- cbind(UNIT=rep("Current International $",
                   dim(new.ssp_gdp.ssp.2)[1]),
-                  prev.gdp[,],
-                  new.ssp_gdp.ssp.2[,c(-1,-2,-3,-4)])
+                  prev.gdp[ord1,1:23], #valores conocidos
+                  new.ssp_gdp.ssp.2[ord2,c(-1:-4)]) #predicciones
 
-
+ord1=order(prev.pop$Country.Name)
+ord2=order(new.ssp_pop.ssp.2$REGION)
 comb.pop <- cbind(
                   UNIT=rep("Current International $", dim(new.ssp_pop.ssp.2)[1]),
-                  prev.pop[,],
-                  new.ssp_pop.ssp.2[,c(-1,-2,-3,-4)])
+                  prev.pop[ord1,1:23],
+                  new.ssp_pop.ssp.2[ord2,c(-1:-4)])
 ```
 
 ```{r}
