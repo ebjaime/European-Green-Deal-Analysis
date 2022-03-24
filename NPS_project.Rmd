@@ -181,7 +181,7 @@ year.grid      <- seq(year.min, year.max)
 
 countries.list <- rownames(consump.fossils.p[-c(1,2,3,4),])
 
-# Construct datasets without total European values 
+# Construct datasets with and without total European values 
 energy.balances.countries  <- energy.balances.p[-c(1,2,3,4),]
 consump.fossils.countries  <- consump.fossils.p[-c(1,2,3,4),]
 consump.oil.petr.countries <- consump.oil.petr.p[-c(1,2,3,4),]
@@ -570,19 +570,19 @@ country1 <- "Spain"
 country2 <- "Italy"
 c12 <- c(country1, country2)
 # Plot their respective boxplot's
-boxplot(energy.balances.countries[c12],
+boxplot(energy.balances.countries[c12,],
         main="Boxplot Energy Balances", xlab="Countries", 
         ylab="Thousand tonnes of oil equivalent")
 
-boxplot(consump.fossils.countries[c12],
+boxplot(consump.fossils.countries[c12,],
         main="Boxplot of Consumption of Solid Fossil Fuels", xlab="Countries", 
         ylab="Thousand tonnes (solid fossil fuels)")
 
-boxplot(consump.oil.petr.countries[c12],
+boxplot(consump.oil.petr.countries[c12,],
         main="Boxplot of Consumption of Oil and Petroleum", xlab="Countries", 
         ylab="Thousand tonnes (oil and petroleum products)")
 
-boxplot(consump.renew.countries[c12], 
+boxplot(consump.renew.countries[c12,], 
         main="Consumption of Renewables", xlab="Countries", 
         ylab="Terajoule")
 
@@ -592,7 +592,7 @@ t1 <- cbind(energy.balances.countries[,country1],
             consump.oil.petr.countries[,country1], #quit -1
             consump.renew.countries[,country1])    #quit -1
 
-t2 <- cbind(energy.balances.countries[country2], 
+t2 <- cbind(energy.balances.countries[,country2], 
             consump.fossils.countries[,country2],
             consump.oil.petr.countries[,country2],
             consump.renew.countries[,country2])
@@ -923,10 +923,6 @@ pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
 
 colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
 colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
-
-```
-
-```{r}
 
 ```
 
