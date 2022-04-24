@@ -332,8 +332,8 @@ But do these last two follow the same distribution?
 
 # NG vs OP ----------------------------------------------------------------
 
-n1 <- dim(as.matrix(consump.gas.mean))[1]
-n2 <- dim(as.matrix(consump.oil.petr.mean))[1]
+n1 <- dim(as.matrix(consump.gas.countries))[1]
+n2 <- dim(as.matrix(consump.oil.petr.countries))[1]
 n  <- n1 + n2
 
 # Test statistic
@@ -915,21 +915,67 @@ pop <- read.xlsx("data/ssp_iiasa_YtY_pop.xlsx", 1)
 gdp.diff <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
 pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
 
-rownames(gdp.diff) <- gdp$REGION
-rownames(pop.diff) <- pop$REGION
+rownames(gdp.diff) <- gdp$Country.Name
+rownames(pop.diff) <- pop$Country.Name
 
 gdp.diff <- gdp.diff[,-1] - gdp.diff[,-length(gdp.diff)]
 pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
+years_90_40=colnames(pop)[-c(1,2,3,4)]
 
-colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
-colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
+colnames(gdp.diff) <- years_90_40[-1]
+colnames(pop.diff) <- years_90_40[-1]
 
+gdp <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
+pop <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
+
+colnames(gdp) <- years_90_40
+colnames(pop) <- years_90_40
+
+rownames(gdp) <- rownames(gdp.diff)
+rownames(pop) <- rownames(pop.diff)
 ```
 
+```{r}
+gdp[is.na(gdp)] <- 0 #replace NA with 0
+gdp.diff[is.na(gdp.diff)] <- 0 
+```
 
+EU totals - original data
+For the moment we are trying to make CO2 predictions with total original data (there's also code for the differences, for the moment let's ignore it)
 ```{r}
 # Not in SSP GDP data and in electricity data
-discard.idx <- rownames(use_solar_elec.diff[-c(1,2,3),])%in%rownames(gdp.diff)
+discard.idx <- rownames(use_solar_elec[-c(1,2,3),])%in%rownames(gdp)
+discard.pop.idx <- rownames(pop)%in%rownames(gdp)
+
+# Take EU totals 
+use_solar_elec.total <- use_solar_elec[2,]
+use_wind_elec.total <- use_wind_elec[2,]
+use_hydro_elec.total <- use_hydro_elec[2,]
+
+pop <- pop[discard.pop.idx,]
+
+# Not in SSP GDP data and in electricity data
+discard.gdp.idx <- rownames(gdp)%in%rownames(use_solar_elec[-c(1,2,3),])
+discard.pop.idx <- rownames(pop)%in%rownames(use_solar_elec[-c(1,2,3),])
+
+gdp <- gdp[discard.gdp.idx,]
+pop <- pop[discard.pop.idx,]
+
+
+rn <- rownames(gdp)
+gdp <- gdp[rn,]
+pop <- pop[rn,]
+
+gdp.total <- as.numeric(colSums(gdp))
+pop.total <- as.numeric(colSums(pop))
+```
+
+Montenegro and Albania should be discarded as they have NaN values or no information available for either population or GDP (see "preprocessing_SSP.Rmd"). Kosovo should be discarded as it is not recognized by the SSP predictions.
+
+First order differences - ignore it for now
+```{r}
+# Not in SSP GDP data and in electricity data
+discard.idx <- rownames(use_solar_elec[-c(1,2,3),])%in%rownames(gdp.diff)
 discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
 
 # We discard the countries which are not going to be used, as well as the EU totals 
@@ -954,14 +1000,26 @@ pop.diff <- pop.diff[rn,]
 use_solar_elec.diff.c <- use_solar_elec.diff.c[rn,]
 use_wind_elec.diff.c <- use_wind_elec.diff.c[rn,]
 use_hydro_elec.diff.c <- use_hydro_elec.diff.c[rn,]
-
-
 ```
 
-Montenegro and Albania should be discarded as they have NaN values or no information available for either population or GDP (see "preprocessing_SSP.Rmd"). Kosovo should be discarded as it is not recognized by the SSP predictions.
 
 ```{r}
+#using EU total values
+gdp.elec.train <- gdp[,as.character(seq(2004,2019))]
+pop.elec.train <- pop[,as.character(seq(2004,2019))]
+gdp.elec.train = colSums(gdp.elec.train)
+pop.elec.train = colSums(pop.elec.train)
 
+gdp.elec.pred  <- gdp[,as.character(seq(2020,2030))]
+pop.elec.pred  <- pop[,as.character(seq(2020,2030))]
+gdp.elec.pred = colSums(gdp.elec.pred)
+pop.elec.pred = colSums(pop.elec.pred)
+```
+
+
+
+```{r}
+#ignore it for now
 gdp.elec.train <- gdp.diff[,as.character(seq(2005,2019))]
 pop.elec.train <- pop.diff[,as.character(seq(2005,2019))]
 
@@ -973,6 +1031,7 @@ pop.elec.pred  <- pop.diff[,as.character(seq(2020,2030))]
 Create dummy variables for countries (simply a numerical sequence) to deal with national production dependence ("Country Effect")
 
 ```{r}
+#ignore it for now
 dummy.country <- seq(1,dim(gdp.diff)[1])
 
 vec_train <- cbind(gdp.elec.train[,1], pop.elec.train[,1], dummy.country)
@@ -1000,11 +1059,25 @@ vec_wind <- gather(use_wind_elec.diff.c,year,y)[,-1]
 
 ```
 
+
+```{r}
+#vectors for EU total data
+vec_train = cbind(gdp.elec.train, pop.elec.train)
+vec_train=data.frame(vec_train)
+colnames(vec_train)=c("gdp","pop")
+
+vec_test = cbind(gdp.elec.pred, pop.elec.pred)
+vec_test=data.frame(vec_test)
+colnames(vec_test)=c("gdp","pop")
+
+vec_train
+```
+
 Creation of models for train and for predictions, according to:
 https://fromthebottomoftheheap.net/2021/02/02/random-effects-in-gams/
 
 ```{r}
-
+#ignore it for now
 train_gam <- function(x,y,out=NULL){
     colnames(x)=c("gdp", "pop", "country")
     train_data=data.frame(y,x)
@@ -1018,6 +1091,38 @@ predict_gam <- function(obj, new_x){
     predict.gam(obj,new_x)
 }
 
+```
+
+```{r}
+train_gam <- function(x,y,out=NULL){ #total version
+    colnames(x)=c("gdp", "pop")
+    train_data=data.frame(y,x)
+    model_gam=gam(y ~ s(gdp) + s(pop), data=train_data)
+}
+
+
+predict_gam <- function(obj, new_x){
+    new_x=data.frame(new_x)
+    colnames(new_x)=c("gdp", "pop")
+    predict.gam(obj,new_x)
+}
+```
+
+```{r}
+#Eu total predictions
+c_preds.wind.total <- conformal.pred(
+    as.matrix(vec_train), 
+    use_wind_elec.total,
+    as.matrix(vec_test),
+    alpha=0.05, 
+    verbose=T, 
+    train.fun = train_gam, 
+    predict.fun = predict_gam)
+
+#Error in gam(y ~ s(gdp) + s(pop), data = train_data) : Model has more coefficients than data
+
+#More data are necessary to work with total values, can we apply smoothing, creating data each 3 months? We need this to predict wind, solar and hydro electricity production, so consequently also gdp and pop. This problem occurs only for electricity data, since they begin in 2004, while for the following models there should not be this problem.
+#Using all the countries brings to ugly plots in conformal predictions.
 ```
 
 
@@ -1052,11 +1157,13 @@ c_preds.wind <- conformal.pred(
 
 Plot predictions 2020-2030:
 ```{r}
-with(data.frame(vec_solar=vec_solar, year=seq(2005,2019)), plot(year, vec_solar, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Solar Electricity Use'))
+with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use'))
 
-lines(rep(seq(2020,2030),34),c_preds.solar$pred,lwd =2, col ="green",lty=3)
-matlines(rep(seq(2020,2030),34),c_preds.solar$up,lwd =1, col =" blue",lty =3)
-matlines(rep(seq(2020,2030),34),c_preds.solar$lo, lwd =1, col =" blue",lty =3)
+lines(rep(seq(2020,2030),34),c_preds.wind$pred,lwd =2, col ="green",lty=3)
+matlines(rep(seq(2020,2030),34),c_preds.wind$up,lwd =1, col =" blue",lty =3)
+matlines(rep(seq(2020,2030),34),c_preds.wind$lo, lwd =1, col =" blue",lty =3)
+
+#ugly plot
 ```
 ```{r}
 with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(-2000,15000)))
@@ -1085,6 +1192,7 @@ x=as.numeric(colnames(use_renew_elec)) #years from 2004 to 2019
 
 plot(x,use_renew_elec[2,],main="Total electricity from renewables - Europe",xlab="Year",ylab="Gigawatt-hour")
 ```
+
 ```{r}
 m_cut=lm(as.numeric(use_renew_elec[2,]) ~ cut(x,breaks=10))
 
@@ -1193,7 +1301,8 @@ matlines(dat$year, se.bands ,lwd =1, col =" blue",lty =3)
 Set a region-based analysis of electricity capacity
 
 ```{r}
-countries=rownames(no_total_no_nuclear)
+countries=rownames(no_total_no_nuclear)# TODO: recompute this dataset, it's the sum of the capacities coming from different sources in prod.by.fuel dataset (discard combustible fuels and nuclear)
+
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
 east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turkey","Ukraine")
@@ -1401,17 +1510,19 @@ rownames(capacity_renew_fuels_nuclear)[which.max(capacity_renew_fuels_nuclear[4:
 ```{r}
 # REVIEW: what to do with NA values?
 
-gdp.diff <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
-pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
+# pay attention, this part is already done above
 
-rownames(gdp.diff) <- gdp$Country.Name
-rownames(pop.diff) <- pop$Country.Name
+#gdp.diff <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
+#pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
 
-gdp.diff <- gdp.diff[,-1] - gdp.diff[,-length(gdp.diff)]
-pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
+#rownames(gdp.diff) <- gdp$Country.Name
+#rownames(pop.diff) <- pop$Country.Name
 
-colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
-colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
+#gdp.diff <- gdp.diff[,-1] - gdp.diff[,-length(gdp.diff)]
+#pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
+
+#colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
+#colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
 ```
 
 
@@ -1440,7 +1551,15 @@ pop.diff.total<-as.numeric(colSums(pop.diff,na.rm=T))[1:40]
 
 ```
 
+```{r}
+gdp.train <- gdp.total[1:30] #from 1990 until 2019
+pop.train <- pop.total[1:30]
 
+gdp.pred <- gdp.total[31:41]
+pop.pred <- pop.total[31:41]
+```
+
+Ignore it for now
 ```{r}
 gdp.train <- gdp.diff.total[1:29]
 pop.train <- pop.diff.total[1:29]
@@ -1458,6 +1577,33 @@ Includes three models, one for each non-renewable energy:
     - DIFF_TOTAL_NATURAL GAS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
 
 ```{r}
+#Eu total data
+vec_oil <- t(rbind(consump.oil.petr.europe,gdp.train,pop.train))
+vec_oil <- data.frame(vec_oil)
+colnames(vec_oil)=c("oil_eu","gdp_eu","pop_eu")
+
+vec_oil_pred <- cbind(gdp.pred, pop.pred)
+vec_oil_pred <- data.frame(vec_oil_pred)
+
+colnames(vec_oil_pred) <- c("gdp_eu","pop_eu")
+
+vec_fossil <- t(rbind(consump.fossils.europe,gdp.train, pop.train))
+vec_fossil <- data.frame(vec_fossil)
+colnames(vec_fossil)=c("fossil_eu","gdp_eu","pop_eu")
+
+vec_fossil_pred=vec_oil_pred
+
+vec_gas <- t(rbind(consump.gas.europe,gdp.train, pop.train))
+vec_gas <- data.frame(vec_gas)
+colnames(vec_gas)=c("gas_eu","gdp_eu","pop_eu")
+
+vec_gas_pred=vec_oil_pred
+```
+
+
+
+```{r}
+#ignore it for now
 # REVIEW: take into account country dummy variable??
 
 vec_oil <- t(rbind(consump.oil.petr.diff.c,gdp.train,pop.train))
@@ -1489,10 +1635,21 @@ vec_gas_pred=vec_fossil_pred
 
 ```
 
+Oil & Petr. total
+```{r}
+consump.oil.petr.gam <- gam(oil_eu ~ s(gdp_eu) + s(pop_eu),
+                           data = vec_oil) 
+summary(consump.oil.petr.gam)
+
+hist(consump.oil.petr.gam$residuals)
+qqnorm(consump.oil.petr.gam$residuals)
+shapiro.test(consump.oil.petr.gam$residuals)
+```
 
 
 Oil & Petr.
 ```{r}
+#ignore it for now
 consump.oil.petr.gam <- gam(dif_oil_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
                            data = vec_oil) 
 summary(consump.oil.petr.gam)
@@ -1502,14 +1659,30 @@ qqnorm(consump.oil.petr.gam$residuals)
 shapiro.test(consump.oil.petr.gam$residuals)
 ```
 ```{r}
+Acf(
+  consump.oil.petr.gam$residuals
+)
+```
+```{r}
 Pacf(
   consump.oil.petr.gam$residuals
 )
+```
+Fossils
+```{r}
+consump.fossils.gam <- gam(fossil_eu ~ s(gdp_eu) + s(pop_eu),
+                           data = vec_fossil) 
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
 ```
 
 
 Fossils:
 ```{r}
+#ignore it for now
 consump.fossils.gam <- gam(dif_fossil_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
                            data = vec_fossil) 
 summary(consump.fossils.gam)
@@ -1519,13 +1692,25 @@ qqnorm(consump.fossils.gam$residuals)
 shapiro.test(consump.fossils.gam$residuals)
 ```
 ```{r}
-Pacf(
+Pacf( 
   consump.fossils.gam$residuals
 )
 ```
 
 Natural gas:
 ```{r}
+consump.gas.gam <- gam(gas_eu ~ s(gdp_eu) + s(pop_eu),
+                           data = vec_gas) 
+summary(consump.gas.gam)
+
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
+```
+
+
+```{r}
+#ignore it for now
 consump.gas.gam <- gam(dif_gas_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
                            data = vec_gas) 
 summary(consump.gas.gam)
@@ -1558,6 +1743,20 @@ Plot predictions
 ```{r}
 
 # See graphs
+with(vec_oil, plot(seq(1990,2019) ,oil_eu ,xlim=c(1990,2030),ylim=c(2e+7,2.8e+7),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
+points(seq(2020,2030), consump.oil.petr.gam.preds$fit ,lwd =2, col ="red")
+
+with(vec_fossil, plot(seq(1990,2019) ,fossil_eu ,xlim=c(1990,2030),ylim=c(0.3e+7,3.6e+7),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Fossil fuels'))
+points(seq(2020,2030), consump.fossils.gam.preds$fit ,lwd =2, col ="red")
+
+with(vec_gas, plot(seq(1990,2019) ,gas_eu ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Natural Gas'))
+points(seq(2020,2030), consump.gas.gam.preds$fit ,lwd =2, col ="red")
+
+```
+
+```{r}
+#ignore it for now
+# See graphs
 with(vec_oil, plot(seq(1991,2019) ,dif_oil_eu ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
 points(seq(2020,2030), consump.oil.petr.gam.preds$fit ,lwd =2, col ="red")
 
@@ -1570,7 +1769,18 @@ points(seq(2020,2030), consump.gas.gam.preds$fit ,lwd =2, col ="red")
 ```
 
 ## DIFF_TOTAL_RENEWABLE CONSUMPTIONS  ~ DIFF_TOTAL_PETROLEUM  + DIFF_TOTAL_SOLID FOSSILFUELS + DIFF_TOTAL_NATURAL GAS:
+
+Let's try with original data, total values
 ```{r}
+# Join all energies for common DF
+vec_re <- cbind(as.numeric(consump.renew.europe[1,]),vec_oil$oil_eu,vec_fossil$fossil_eu, vec_gas$gas_eu)
+vec_re <- data.frame(vec_re)
+colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
+```
+
+```{r}
+#ignore it for now
+
 # Join all energies for common DF
 vec_re <- cbind(consump.renew.diff.c[,1],consump.oil.petr.diff.c[,1],consump.fossils.diff.c[,1], consump.gas.diff.c[,1])
 for (j in 2:29){
@@ -1583,13 +1793,16 @@ colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
 
 
 ```{r}
-consump.renew.gam <- gam(value_re ~ s(value_oil,bs='re') + s(value_ff,bs='re') + s(value_ng,bs='re'), data=vec_re)
+consump.renew.gam <- gam(value_re ~ s(value_oil) + s(value_ff) + s(value_ng), data=vec_re)
 
 summary(consump.renew.gam)
 
 hist(consump.renew.gam$residuals)
 qqnorm(consump.renew.gam$residuals)
 shapiro.test(consump.renew.gam$residuals)
+```
+```{r}
+Pacf(consump.renew.gam$residuals)
 ```
 
 ```{r}
@@ -1603,8 +1816,8 @@ consump.renew.gam.preds <- predict(consump.renew.gam, newdata=vec_re_pred, se=T)
 
 ```{r}
 # See graphs
-with(vec_re, plot(rep(seq(1991,2019),34) ,value_re ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Renewable Energy Consumption.'))
-points(rep(seq(2020,2030),34), consump.renew.gam.preds$fit ,lwd =2, col ="red")
+with(vec_re, plot(seq(1990,2019) ,value_re ,xlim=c(1990,2030),ylim=c(2e+6,7e+6),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Renewable Energy Consumption.'))
+points(seq(2020,2030), consump.renew.gam.preds$fit ,lwd =2, col ="red")
 ```
 
 
@@ -1614,10 +1827,24 @@ points(rep(seq(2020,2030),34), consump.renew.gam.preds$fit ,lwd =2, col ="red")
 c02 <- read.xlsx("data/annual-co-emissions-by-region.xlsx", sheet=2)
 
 # Check if all countries are present in other EU stats 
-sum(!(unique(c02$Country) %in% rownames(consump.renew.diff.c))) > 0 
+sum(!(unique(c02$Country) %in% rownames(gdp))) > 0
+sum(!( rownames(gdp) %in% unique(c02$Country))) > 0
 ```
+Import EU dataframe
+```{r}
+Co2=read.xlsx("data/owid-co2-data.xlsx",sheet=2,colNames=F)
+colnames(Co2)=c("European Union","Year","ValueCo2")
+head(Co2)
+```
+
+```{r}
+plot(Co2$Year,Co2$ValueCo2)
+```
+
+
 Calculate differences:
 ```{r}
+#ignore for now
 c02.diff <- data.frame()
 for(i in 1:34){
     for(j in 1:29){ # 1990-2019
@@ -1630,6 +1857,7 @@ colnames(c02.diff) <- colnames(c02)[c(-2,-5)]
 
 
 ```{r}
+#ignore for now
 vec_c02 <- rbind(c02.diff[,3], vec_re[,1]) #FIXME
 vec_c02 <- lapply(vec_c02, as.numeric)
 vec_c02 <- data.frame(vec_c02)
@@ -1640,8 +1868,20 @@ colnames(vec_c02_pred) <- c("value_re")
 
 ```
 
+
 ```{r}
-c02.gam <- gam(value_c02 ~ s(value_re,bs='re'), data=vec_c02)
+vec_c02= cbind(Co2$ValueCo2,vec_re$value_re)
+vec_c02 <- data.frame(vec_c02)
+vec_c02_pred <- data.frame(consump.renew.gam.preds$fit)
+
+colnames(vec_c02) <- c("value_c02", "value_re")
+colnames(vec_c02_pred) <- c("value_re")
+
+```
+
+
+```{r}
+c02.gam <- gam(value_c02 ~ s(value_re), data=vec_c02)
 
 summary(c02.gam)
 
@@ -1649,8 +1889,27 @@ hist(c02.gam$residuals)
 qqnorm(c02.gam$residuals)
 shapiro.test(c02.gam$residuals)
 ```
+```{r}
+Pacf(c02.gam$residuals)
+```
+```{r}
+c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
+
+with(vec_c02, plot(seq(1990,2019) ,value_c02 ,xlim=c(1990,2030),ylim=c(2500,5000),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
+points(seq(2020,2030),c02.gam.preds$fit ,lwd =2, col ="red")
+```
+How much is the predicted decrement?
+```{r}
+co2_original=vec_c02$value_c02[1]
+co2_prediction=as.numeric(c02.gam.preds$fit[length(c02.gam.preds$fit)])
+
+reduction=(co2_original-co2_prediction)/co2_original
+reduction
+```
+
 
 ```{r}
+#ignore for now
 c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
 
 with(vec_c02, plot(rep(seq(1991,2019),34) ,value_c02 ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - c02 levels.'))
