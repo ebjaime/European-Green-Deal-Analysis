@@ -106,7 +106,10 @@ consump.renew.5  <- read.xlsx("data/consumption_renewables.xlsx",sheet=5) # Rene
 
 percent.renew <- read.xlsx("data/percentage_renewables.xlsx") 
 
-prod.by.fuel <- read.xlsx("data/production_capacities_by_fuel.xlsx")
+prod.by.fuel.total <- read.xlsx("data/production_capacities_by_fuel.xlsx", sheet=1)
+prod.by.fuel.comb <- read.xlsx("data/production_capacities_by_fuel.xlsx", sheet=2)
+prod.by.fuel.nuclear <- read.xlsx("data/production_capacities_by_fuel.xlsx", sheet=9)
+
 ```
 
 We will now preprocess all datasets with our auxilary function. We will also compute the total Renewable energy's consumption levels by summing all the consumptions for all types of Renewable sources.
@@ -130,8 +133,15 @@ consump.renew.4.p <- preprocess(consump.renew.4[,-32])
 consump.renew.5.p <- preprocess(consump.renew.5[,-32])
 
 consump.renew.p <- consump.renew.1.p # Sum of all renewable energies
-consump.renew.p[-1,] <- consump.renew.p[-1,] + consump.renew.2.p[-1,] + consump.renew.3.p[-1,] +
-    consump.renew.4.p[-1,] + consump.renew.5.p[-1,]
+consump.renew.p[-1,] <- consump.renew.p[-1,] + consump.renew.2.p[-1,] + consump.renew.3.p[-1,] +consump.renew.4.p[-1,] + consump.renew.5.p[-1,]
+
+
+prod.by.fuel.total.p = preprocess(prod.by.fuel.total)
+prod.by.fuel.comb.p = preprocess(prod.by.fuel.comb)
+prod.by.fuel.nuclear.p = preprocess(prod.by.fuel.nuclear)
+
+prod.by.fuel.renew = prod.by.fuel.total.p
+prod.by.fuel.renew[-1,] = prod.by.fuel.renew[-1,] - prod.by.fuel.comb.p[-1,] - prod.by.fuel.nuclear.p[-1,] #renewable electricity capacity (MegaWatt)
 
 
 ```
@@ -320,6 +330,19 @@ legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas","R
 
 
 ```
+Plot of only non-renewables
+```{r}
+matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
+                                       consump.oil.petr.mean,
+                                       consump.gas.mean)),
+        type="l",main="Consumption means for each type of non renewable fuel",xlab="Years",ylab="Terajoules",lwd=2,lty=1,
+        ylim=c(min(consump.fossils.mean)-30000,max(consump.fossils.mean)+30000))
+
+legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas"), col=1:3, pch=2)
+```
+We start with a permutational MANOVA to see whether the three
+
+
 
 Renewable consumption and Fossil Fuels are very different from oil & petr. and natural gas consumption.
 But do these last two follow the same distribution?
@@ -1889,16 +1912,19 @@ hist(c02.gam$residuals)
 qqnorm(c02.gam$residuals)
 shapiro.test(c02.gam$residuals)
 ```
+
 ```{r}
 Pacf(c02.gam$residuals)
 ```
+
 ```{r}
 c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
 
 with(vec_c02, plot(seq(1990,2019) ,value_c02 ,xlim=c(1990,2030),ylim=c(2500,5000),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
 points(seq(2020,2030),c02.gam.preds$fit ,lwd =2, col ="red")
 ```
-How much is the predicted decrement?
+
+How much is the predicted decrease?
 ```{r}
 co2_original=vec_c02$value_c02[1]
 co2_prediction=as.numeric(c02.gam.preds$fit[length(c02.gam.preds$fit)])
