@@ -448,7 +448,7 @@ p_val
 ```
 
 
-What about using year-to-year variates? Does the renew. consumption follow the same distribution as fossils or oil & petr. consumption?
+What about using year-to-year variates? Does the renewable consumption growth follow the same distribution as the non renewable decrease?
 ```{r}
 
 # RE vs OP ----------------------------------------------------------------
@@ -626,7 +626,7 @@ source <- c(rep("Hydro",37),rep("Wind",37),rep("Solar",37))
 source <- factor(source)
 ```
 
-Obtain differences year to year from these datasets, as done before:
+Let's obtain year to year differences from these datasets, as done before:
 
 ```{r}
 
@@ -660,7 +660,7 @@ legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 ```
 
 ```{r}
-matplot(colnames(use_principal.diff),t(use_principal.diff),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from Hydro-Wind-Solar",col=source)
+matplot(colnames(use_principal.diff),t(use_principal.diff),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from Hydro-Wind-Solar, year yo year variations",col=source)
 legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 ```
 
