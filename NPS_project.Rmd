@@ -143,8 +143,14 @@ prod.by.fuel.nuclear.p = preprocess(prod.by.fuel.nuclear)
 prod.by.fuel.renew = prod.by.fuel.total.p
 prod.by.fuel.renew[-1,] = prod.by.fuel.renew[-1,] - prod.by.fuel.comb.p[-1,] - prod.by.fuel.nuclear.p[-1,] #renewable electricity capacity (MegaWatt)
 
+colnames(prod.by.fuel.total.p)= prod.by.fuel.total.p[1,]
+prod.by.fuel.total.p=prod.by.fuel.total.p[-1,]
+
+colnames(prod.by.fuel.renew)= prod.by.fuel.renew[1,]
+prod.by.fuel.renew=prod.by.fuel.renew[-1,]
 
 ```
+
 
 We can check what we obtain in total:
 
@@ -340,7 +346,7 @@ matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
 
 legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas"), col=1:3, pch=2)
 ```
-We start with a permutational MANOVA to see whether the three
+We start with a permutational MANOVA to see whether the three #TODO: MANOVA
 
 
 
@@ -454,7 +460,7 @@ What about using year-to-year variates? Does the renewable consumption growth fo
 # RE vs OP ----------------------------------------------------------------
 # Use year by year change of each energy (RE vs OP (or NG or FF))
 
-mean.consump.nonrenew <- ( consump.fossils.countries[,]+consump.gas.countries[,]+consump.oil.petr.countries[,] )/3
+mean.consump.nonrenew <-(consump.fossils.countries[,]+consump.gas.countries[,]+consump.oil.petr.countries[,] )/3
 mean.consump.nonrenew.mean=colMeans(mean.consump.nonrenew)
 
 matplot(seq(year.min, year.max), t(rbind(mean.consump.nonrenew.mean,
@@ -1029,6 +1035,7 @@ lines(rep(seq(2020,2030),34),c_preds.wind$pred,lwd =2, col ="green",lty=3)
 matlines(rep(seq(2020,2030),34),c_preds.wind$up,lwd =1, col =" blue",lty =3)
 matlines(rep(seq(2020,2030),34),c_preds.wind$lo, lwd =1, col =" blue",lty =3)
 ```
+
 ```{r}
 with(data.frame(vec_hydro=vec_hydro, year=seq(2005,2019)), plot(year, vec_hydro, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use'))
 
@@ -1158,7 +1165,8 @@ matlines(dat$year, se.bands ,lwd =1, col =" blue",lty =3)
 Set a region-based analysis of electricity capacity
 
 ```{r}
-countries=rownames(no_total_no_nuclear)# TODO: recompute this dataset, it's the sum of the capacities coming from different sources in prod.by.fuel dataset (discard combustible fuels and nuclear)
+prod.by.fuel.renew.countries=prod.by.fuel.renew[-c(1,2,3),]
+countries=rownames(prod.by.fuel.renew.countries)# TODO: recompute this dataset, it's the sum of the capacities coming from different sources in prod.by.fuel dataset (discard combustible fuels and nuclear)
 
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
@@ -1172,10 +1180,10 @@ length(countries)==length(c(north_europe,south_europe,east_europe,central_europe
 ```
 Let's build the dataframe with groups attached, to perform an anova test on 2019 capacities
 ```{r}
-north=no_total_no_nuclear[match(north_europe,countries),30]
-east=no_total_no_nuclear[match(east_europe,countries),30]
-south=no_total_no_nuclear[match(south_europe,countries),30]
-central=no_total_no_nuclear[match(central_europe,countries),30]
+north=prod.by.fuel.renew.countries[match(north_europe,countries),30]
+east=prod.by.fuel.renew.countries[match(east_europe,countries),30]
+south=prod.by.fuel.renew.countries[match(south_europe,countries),30]
+central=prod.by.fuel.renew.countries[match(central_europe,countries),30]
 
 north=cbind(north,rep("North",length(north)))
 east=cbind(east,rep("Eastern",length(east)))
@@ -1239,13 +1247,13 @@ This is not a meaningful result, since we are not taking into account the sizes 
 
 Let's build the ad-hoc dataframe with relative capacities of 2019
 ```{r}
-north=no_total_no_nuclear[match(north_europe,countries),30]/(total_capacity[4:38,][match(north_europe,countries),30])
+north=prod.by.fuel.renew.countries[match(north_europe,countries),30]/(prod.by.fuel.total.p[4:38,][match(north_europe,countries),30])
 
-east=no_total_no_nuclear[match(east_europe,countries),30]/(total_capacity[4:38,][match(east_europe,countries),30])
+east=prod.by.fuel.renew.countries[match(east_europe,countries),30]/(prod.by.fuel.total.p[4:38,][match(east_europe,countries),30])
 
-south=no_total_no_nuclear[match(south_europe,countries),30]/(total_capacity[4:38,][match(south_europe,countries),30])
+south=prod.by.fuel.renew.countries[match(south_europe,countries),30]/(prod.by.fuel.total.p[4:38,][match(south_europe,countries),30])
 
-central=no_total_no_nuclear[match(central_europe,countries),30]/(total_capacity[4:38,][match(central_europe,countries),30])
+central=prod.by.fuel.renew.countries[match(central_europe,countries),30]/(prod.by.fuel.total.p[4:38,][match(central_europe,countries),30])
 
 north=cbind(north,rep("Northern",length(north)))
 east=cbind(east,rep("Eastern",length(east)))
@@ -1301,6 +1309,7 @@ Let's find a 95% confidence interval for the median of electricity capacity from
 ```{r}
 median(aov_no_nuclear$cap_19)
 ```
+
 ```{r}
 uni_t_perm=function(data,mu0,B=1000){
 
@@ -1342,24 +1351,6 @@ pval_function=pbsapply(grid,perm_wrapper,cl=cl)
 plot(grid,pval_function,type='l')
 range(grid[pval_function>0.05])
 ```
-
-
-
-
-```{r}
-matplot(colnames(capacity_renew_fuels_nuclear),t(capacity_renew_fuels_nuclear[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables (with nuclear)")
-```
-
-
-Even if we include nuclear, Germany is still at the top
-```{r}
-rownames(capacity_renew_fuels_nuclear)[which.max(capacity_renew_fuels_nuclear[4:38,30])+3] #first three rows are total european statistics
-```
-
-
-
-
-
 
 # Core: Model to predict future european CO2
 
