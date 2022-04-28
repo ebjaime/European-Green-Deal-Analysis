@@ -20,6 +20,7 @@ library(np)
 library(splines)
 library(devtools)
 library(tidyr)
+library(jsonlite)
 # Depth
 #library(DepthProc)
 #library(robustbase)
@@ -145,6 +146,9 @@ prod.by.fuel.renew[-1,] = prod.by.fuel.renew[-1,] - prod.by.fuel.comb.p[-1,] - p
 
 colnames(prod.by.fuel.total.p)= prod.by.fuel.total.p[1,]
 prod.by.fuel.total.p=prod.by.fuel.total.p[-1,]
+
+colnames(prod.by.fuel.comb.p)= prod.by.fuel.comb.p[1,]
+prod.by.fuel.comb.p=prod.by.fuel.comb.p[-1,]
 
 colnames(prod.by.fuel.renew)= prod.by.fuel.renew[1,]
 prod.by.fuel.renew=prod.by.fuel.renew[-1,]
@@ -530,7 +534,7 @@ p_val
 
 
 
-## SECOND TARGET: investigate how electricity production coming from renewable sources is growing
+## 2. Investigate how electricity production coming from renewable sources is growing
 
 Let's visualize the total electricity production trend by country
 
@@ -658,15 +662,15 @@ colnames(use_principal.diff) <- seq(2005,2019)
 
 ```
 
-Plot trends
+Plot electricity trends
 
 ```{r}
-matplot(colnames(use_principal),t(use_principal),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from Hydro-Wind-Solar",col=source)
+matplot(colnames(use_principal),t(use_principal),type='l',xlab="Year",ylab="Gigawatt-hour",main="Electricity from Hydro-Wind-Solar",col=source)
 legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 ```
 
 ```{r}
-matplot(colnames(use_principal.diff),t(use_principal.diff),type='l',xlab="Year",ylab="Gigawatt-hour",main="Total electricity from Hydro-Wind-Solar, year yo year variations",col=source)
+matplot(colnames(use_principal.diff),t(use_principal.diff),type='l',xlab="Year",ylab="Gigawatt-hour",main="Electricity from Hydro-Wind-Solar, year to year variations",col=source)
 legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 ```
 
@@ -709,7 +713,7 @@ p_val <- sum(T_stat>=T0)/B
 p_val
 ```
 
-So here we have statistical evidence that the three main renewable sources have not the same distribution in terms of total generated electricity.
+So here we have statistical evidence that the three main renewable sources have not the same growth distribution in terms of generated electricity.
 
 We can further investigate whether Solar and Wind are equally distributed (i.e. developing at the same rate) or not.
 ```{r}
@@ -985,7 +989,7 @@ c_preds.wind.total <- conformal.pred(
 #Error in gam(y ~ s(gdp) + s(pop), data = train_data) : Model has more coefficients than data
 
 #More data are necessary to work with total values, can we apply smoothing, creating data each 3 months? We need this to predict wind, solar and hydro electricity production, so consequently also gdp and pop. This problem occurs only for electricity data, since they begin in 2004, while for the following models there should not be this problem.
-#Using all the countries brings to ugly plots in conformal predictions.
+#Using all the countries brings to ugly plots in conformal predictions, so we worked with total EU values
 ```
 
 
@@ -1028,6 +1032,7 @@ matlines(rep(seq(2020,2030),34),c_preds.wind$lo, lwd =1, col =" blue",lty =3)
 
 #ugly plot
 ```
+
 ```{r}
 with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(-2000,15000)))
 
@@ -1035,6 +1040,7 @@ lines(rep(seq(2020,2030),34),c_preds.wind$pred,lwd =2, col ="green",lty=3)
 matlines(rep(seq(2020,2030),34),c_preds.wind$up,lwd =1, col =" blue",lty =3)
 matlines(rep(seq(2020,2030),34),c_preds.wind$lo, lwd =1, col =" blue",lty =3)
 ```
+
 
 ```{r}
 with(data.frame(vec_hydro=vec_hydro, year=seq(2005,2019)), plot(year, vec_hydro, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use'))
@@ -1049,115 +1055,189 @@ matlines(rep(seq(2020,2030),34),c_preds.hydro$lo, lwd =1, col =" blue",lty =3)
 
 ### Regression on european electricity capacity
 
-REVIEW: IS IT NECESSARY TO KEEP THIS? Let's make a step regression on total European values
-
+Let's plot some trends
 ```{r}
-x=as.numeric(colnames(use_renew_elec)) #years from 2004 to 2019
-
-plot(x,use_renew_elec[2,],main="Total electricity from renewables - Europe",xlab="Year",ylab="Gigawatt-hour")
+matplot(colnames(prod.by.fuel.total.p),t(prod.by.fuel.total.p[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Total electricity capacities")
 ```
 
 ```{r}
-m_cut=lm(as.numeric(use_renew_elec[2,]) ~ cut(x,breaks=10))
+matplot(colnames(prod.by.fuel.comb.p),t(prod.by.fuel.comb.p[4:38,]),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from non-renewables")
+```
 
-years.grid=seq(range(x)[1],range(x)[2],by=0.1)
-preds=predict(m_cut,list(x=years.grid),se=T)
+
+```{r}
+matplot(colnames(prod.by.fuel.renew.countries),t(prod.by.fuel.renew.countries),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables")
+```
+
+Now let's perform a nonparametric regression to compare European trends of renewable vs non renewable electricity capacity
+```{r}
+years_90_19=as.numeric(colnames(prod.by.fuel.comb.p))
+plot(years_90_19,as.numeric(prod.by.fuel.comb.p[2,]),main="European non-renewable electricity capacity",xlab="Year",ylab="Megawatt")
+```
+
+```{r}
+m_list=lapply(1:10,function(degree){lm(as.numeric(prod.by.fuel.comb.p[2,]) ~ poly(as.numeric(years_90_19),degree=degree))})
+do.call(anova,m_list)
+```
+
+
+```{r}
+summary(m_list[[2]])
+```
+
+```{r}
+summary(m_list[[3]])
+
+```
+
+```{r}
+summary(m_list[[6]])
+
+```
+
+
+```{r}
+plot(years_90_19,as.numeric(prod.by.fuel.comb.p[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years_90_19,m_list[[2]]$fitted.values,col="red")
+
+```
+```{r}
+plot(years_90_19,as.numeric(prod.by.fuel.comb.p[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years_90_19,m_list[[3]]$fitted.values,col="red")
+```
+```{r}
+plot(years_90_19,as.numeric(prod.by.fuel.comb.p[2,]),main="European Non Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years_90_19,m_list[[6]]$fitted.values,col="red")
+```
+
+Third grade polynomial regression seems reasonable (theorethically we should choose grade 9, since it's the last significant model: 10th grade regression is not significant)
+
+```{r}
+comb_model=m_list[[3]]
+```
+
+
+Now let's move to renewables
+```{r}
+plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+```
+
+```{r}
+m_list=lapply(1:10,function(degree){lm(as.numeric(prod.by.fuel.renew[2,]) ~ poly(as.numeric(years_90_19),degree=degree))})
+do.call(anova,m_list)
+```
+```{r}
+summary(m_list[[2]])
+
+```
+```{r}
+summary(m_list[[4]])
+
+```
+```{r}
+summary(m_list[[7]])
+
+```
+```{r}
+plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years_90_19,m_list[[2]]$fitted.values,col="green")
+```
+```{r}
+plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years_90_19,m_list[[4]]$fitted.values,col="green")
+```
+
+```{r}
+plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
+lines(years_90_19,m_list[[7]]$fitted.values,col="green")
+```
+Since by passing to fourth grade we only add one parameter w.r.t second grade (third grade coefficient is considered zero), we can consider the fourth grade regression.
+
+But we can notice that the coefficient of fourth grade is negative! It's not really reasonable for future predictions, so we stick to second grade
+
+
+```{r}
+ren_model=m_list[[2]]
+```
+
+
+```{r}
+anni=seq(range(years_90_19)[1],range(years_90_19)[2],by=0.25)
+preds=predict(comb_model,list(years_90_19=anni),se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-plot(x ,as.numeric(use_renew_elec[2,]) ,xlim=range(years.grid) ,cex =.5, col =" darkgrey ",main='Custom cut Fit',xlab="Year",ylab="Gigawatt-hour")
-lines(years.grid,preds$fit ,lwd =2, col =" blue")
-matlines(years.grid ,se.bands ,lwd =1, col =" blue",lty =3)
-```
-Terrible...
-Let's try with local regression
+plot(years_90_19 ,as.numeric(prod.by.fuel.comb.p[2,]) ,xlim=range(anni), ylim=range(as.numeric(prod.by.fuel.renew[2,]))+5000,cex =.5, col =" darkgrey ",main='Polynomial regression on european electricity capacity',xlab="Year",ylab="Megawatt")
+lines(anni,preds$fit ,lwd =2, col =" red")
+matlines (anni ,se.bands ,lwd =1, col =" red",lty =3)
 
-```{r}
-a=data.frame(giga=as.numeric(use_renew_elec[2,]),years_a=x)
-m_loc = npreg(giga ~ years_a,
-              ckertype = 'uniform',
-              bws = 2, # bandwidth
-              data= a)
-dat=data.frame(years_a=years.grid)
-preds=predict(m_loc,newdata=dat,se=T)
+preds=predict(ren_model,list(years_90_19=anni),se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-plot(
-    x,
-    as.numeric(use_renew_elec[2,]) ,
-    xlim = range(years.grid) ,
-    cex = .5,
-    col = " darkgrey ",
-    main = 'Local Averaging - bws2 - Uniform kernel',
-    xlab="Year",
-    ylab="Gigawatt-hour"
-  )
-lines(years.grid,preds$fit ,lwd =2, col =" blue")
-matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
-```
-Maybe gaussian kernel would be better?
-```{r}
-a=data.frame(giga=as.numeric(use_renew_elec[2,]),years_a=x)
-m_loc = npreg(giga ~ years_a,
-              ckertype = 'gaussian',
-              bws = 1.5, # bandwidth
-              data= a)
-dat=data.frame(years_a=years.grid)
-preds=predict(m_loc,newdata=dat,se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-plot(
-    x,
-    as.numeric(use_renew_elec[2,]) ,
-    xlim = range(years.grid) ,
-    cex = .5,
-    col = " darkgrey ",
-    main = 'Local Averaging - bws2 - Gaussian kernel',
-    xlab="Year",
-    ylab="Gigawatt-hour"
-  )
-lines(years.grid,preds$fit ,lwd =2, col =" blue")
-matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
+points(years_90_19 ,as.numeric(prod.by.fuel.renew[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ",pch=2)
+lines(anni,preds$fit ,lwd =2, col =" green")
+matlines (anni ,se.bands ,lwd =1, col =" green",lty =3)
+
+legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
 ```
 
+Let's try with spline regression
 ```{r}
-list_vec=flatten(use_renew_elec[4:40,])
-vec=cbind(list_vec[[1]],rep(2004,37))
-for (j in 2:16){
-  v=cbind(list_vec[[j]],rep(2004+j-1,37))
-  vec=rbind(vec,v)
-}
-vec=data.frame(vec)
-colnames(vec)=c("value","year")
+#combustible fuels
+b=data.frame(cap=as.numeric(prod.by.fuel.comb.p[2,]),years_b=years_90_19)
+comb_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=b )
+dat_b=data.frame(years_b=anni)
 
-m_loc = npreg(value ~ year,
-              ckertype = 'gaussian',
-              bws = 2, # bandwidth
-              data= vec)
-dat=data.frame(year=years.grid)
-preds=predict(m_loc,newdata=dat,se=T)
-se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
-plot(
-    vec$year,
-    vec$value ,
-    xlim = range(years.grid) ,
-    cex = .5,
-    col = " darkgrey ",
-    main = 'Local Averaging - bws2 - Gaussian kernel',
-    xlab="Year",
-    ylab="Gigawatt-hour"
-  )
-lines(years.grid,preds$fit ,lwd =2, col =" blue")
-matlines(years.grid,se.bands ,lwd =1, col =" blue",lty =3)
-```
-Let's try with splines
-```{r}
-model_cubic_splines <-
-  lm(value ~ bs(year, degree = 3,df = 10), data = vec)
-
-preds=predict(model_cubic_splines,dat,se=T)
+preds=predict(comb_model_spline,dat_b,se=T)
 se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
 
-with(vec, plot(year ,value ,xlim=range(dat$year) ,cex =.5, col =" darkgrey "))
-lines(dat$year,preds$fit ,lwd =2, col =" blue")
-matlines(dat$year, se.bands ,lwd =1, col =" blue",lty =3)
+plot(years_90_19,as.numeric(prod.by.fuel.comb.p[2,]) ,xlim=range(anni),
+    ylim=range(as.numeric(prod.by.fuel.renew[2,]))+5000,cex =.5, col =" darkgrey ",
+    main="Splines regression on european electricity capacity",xlab="Year",ylab="Megawatt")
+
+legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
+
+lines(anni,preds$fit ,lwd =2, col =" red")
+matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
+
+#renewables
+c=data.frame(cap=as.numeric(prod.by.fuel.renew[2,]),years_b=years_90_19)
+ren_model_spline <- lm(cap ~ bs(years_b, df=7,degree=2), data=c )
+dat_b=data.frame(years_b=anni)
+
+preds=predict(ren_model_spline,dat_b,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+points(years_90_19 ,as.numeric(prod.by.fuel.renew[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
+lines(anni,preds$fit ,lwd =2, col =" green")
+matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
 ```
+
+Natural splines
+```{r}
+comb_model_spline <- lm(cap ~ ns(years_b, df=8), data=b )
+dat_b=data.frame(years_b=anni)
+
+preds=predict(comb_model_spline,dat_b,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+plot(years_90_19 ,as.numeric(prod.by.fuel.comb.p[2,]) ,xlim=range(anni) ,ylim=range(as.numeric(prod.by.fuel.renew[2,]))+3000,cex =.5, col =" darkgrey ",
+     main="Natural Splines regression on european electricity capacity",xlab="Year",ylab="Megawatt")
+
+legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
+
+lines(anni,preds$fit ,lwd =2, col =" red")
+matlines(anni, se.bands ,lwd =1, col =" red",lty =3)
+
+ren_model_spline <- lm(cap ~ ns(years_b, df=7), data=c )
+dat_b=data.frame(years_b=anni)
+
+preds=predict(ren_model_spline,dat_b,se=T)
+se.bands=cbind(preds$fit +2* preds$se.fit ,preds$fit -2* preds$se.fit)
+
+points(years_90_19 ,as.numeric(prod.by.fuel.renew[2,]) ,xlim=range(anni) ,cex =.5, col =" darkgrey ")
+lines(anni,preds$fit ,lwd =2, col =" green")
+matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
+```
+
+
 
 
 ### ANOVA test on 2019 capacities, dividing Europe in four regions
@@ -1354,36 +1434,16 @@ range(grid[pval_function>0.05])
 
 # Core: Model to predict future european CO2
 
-
-```{r}
-# REVIEW: what to do with NA values?
-
-# pay attention, this part is already done above
-
-#gdp.diff <- data.frame(lapply(gdp[,-c(1,2,3,4)],as.numeric))
-#pop.diff <- data.frame(lapply(pop[,-c(1,2,3,4)],as.numeric))
-
-#rownames(gdp.diff) <- gdp$Country.Name
-#rownames(pop.diff) <- pop$Country.Name
-
-#gdp.diff <- gdp.diff[,-1] - gdp.diff[,-length(gdp.diff)]
-#pop.diff <- pop.diff[,-1] - pop.diff[,-length(pop.diff)]
-
-#colnames(gdp.diff) <- colnames(gdp)[-c(1,2,3,4,5)]
-#colnames(pop.diff) <- colnames(pop)[-c(1,2,3,4,5)]
-```
-
-
 ```{r}
 # Not in SSP GDP data and in EUstat data
 discard.idx <- rownames(consump.oil.petr.diff[-c(1,2,3),])%in%rownames(gdp.diff)
 discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
 
 # We discard the countries which are not going to be used, as well as the EU totals 
-consump.oil.petr.diff.c <- consump.oil.petr.diff[3,]
-consump.gas.diff.c <- consump.gas.diff[3,]
-consump.fossils.diff.c <- consump.fossils.diff[3,]
-consump.renew.diff.c <- consump.renew.diff[3,]
+consump.oil.petr.diff.total <- consump.oil.petr.diff[3,]
+consump.gas.diff.total <- consump.gas.diff[3,]
+consump.fossils.diff.total <- consump.fossils.diff[3,]
+consump.renew.diff.total <- consump.renew.diff[3,]
 
 pop.diff <- pop.diff[discard.pop.idx,]
 
