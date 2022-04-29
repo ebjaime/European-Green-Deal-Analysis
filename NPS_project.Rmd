@@ -221,7 +221,7 @@ colnames(consump.renew.countries) <- NULL
 ```
 
 Since we are working with time series, by their nature data are yearly correlated.
-To deal with this problem, let's construct year to year variations dataset:
+To deal with this problem, let's construct year to year variations datasets:
 ```{r}
 energy.balances.diff <- energy.balances.p[-1,-1] - energy.balances.p[-1,-length(energy.balances.p)]
 consump.fossils.diff <- consump.fossils.p[-1,-1] - consump.fossils.p[-1,-length(consump.fossils.p)]
@@ -238,7 +238,7 @@ consump.renew.diff <- rbind(year=seq(1991, 2019), consump.renew.diff)
 
 The analysis of current European renewable transition is structured in three sections:
 
-## 1. What is the trend of renewable and non-renewable consumptions.
+## First target: investigate how renewable and non-renewable consumptions are evolving.
 
 
 We can visualize the consumption levels of all EU countries.
@@ -534,7 +534,7 @@ p_val
 
 
 
-## 2. Investigate how electricity production coming from renewable sources is growing
+## Second Target: Investigate how electricity production coming from renewable sources is growing
 
 Let's visualize the total electricity production trend by country
 
@@ -1051,7 +1051,7 @@ matlines(rep(seq(2020,2030),34),c_preds.hydro$lo, lwd =1, col =" blue",lty =3)
 ```
 
 
-## 3. Analysis of EU's current day renewable energy network.
+## Third Target: Analyse the current European renewable energy network.
 
 ### Regression on european electricity capacity
 
@@ -1069,7 +1069,7 @@ matplot(colnames(prod.by.fuel.comb.p),t(prod.by.fuel.comb.p[4:38,]),type='l',xla
 matplot(colnames(prod.by.fuel.renew.countries),t(prod.by.fuel.renew.countries),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables")
 ```
 
-Now let's perform a nonparametric regression to compare European trends of renewable vs non renewable electricity capacity
+Now let's perform different kinds of nonparametric regression to compare European trends of renewable vs non renewable electricity capacity
 ```{r}
 years_90_19=as.numeric(colnames(prod.by.fuel.comb.p))
 plot(years_90_19,as.numeric(prod.by.fuel.comb.p[2,]),main="European non-renewable electricity capacity",xlab="Year",ylab="Megawatt")
@@ -1237,7 +1237,7 @@ lines(anni,preds$fit ,lwd =2, col =" green")
 matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
 ```
 
-
+Natural cubic splines seems the best approach, it better captures all the local variations.
 
 
 ### ANOVA test on 2019 capacities, dividing Europe in four regions
@@ -1432,8 +1432,13 @@ plot(grid,pval_function,type='l')
 range(grid[pval_function>0.05])
 ```
 
-# Core: Model to predict future european CO2
+# Core: Model to predict future european CO2 emissions
+We have set ourselves the goal of predicting whether the Green Deal target of a 55% cut in greenhouse gases (CO2) emissions by 2030 with respect to 1990 levels is feasible.
 
+With the target to develop a model to predict future CO2 emissions as a function of the other energy indicators we had to previously construct a variety of auxiliar models to predict covariates values to be used in the final model.
+
+
+Keeping only European countries for which we have complete data of Gdp, Population and Energy consumptions.
 ```{r}
 # Not in SSP GDP data and in EUstat data
 discard.idx <- rownames(consump.oil.petr.diff[-c(1,2,3),])%in%rownames(gdp.diff)
@@ -1459,6 +1464,7 @@ pop.diff.total<-as.numeric(colSums(pop.diff,na.rm=T))[1:40]
 
 ```
 
+
 ```{r}
 gdp.train <- gdp.total[1:30] #from 1990 until 2019
 pop.train <- pop.total[1:30]
@@ -1467,22 +1473,16 @@ gdp.pred <- gdp.total[31:41]
 pop.pred <- pop.total[31:41]
 ```
 
-Ignore it for now
-```{r}
-gdp.train <- gdp.diff.total[1:29]
-pop.train <- pop.diff.total[1:29]
 
-gdp.pred  <- gdp.diff.total[30:40]
-pop.pred  <- pop.diff.total[30:40]
-```
+Since we are working with time series, where there is a strong temporal dependence, from now on each time we are constructing a model we check the correlation of the residuals using the (partial) autocorrelation function. This is important to understand whether the model is able to capture the relations in original data or whether it is better to perform a first order differentiation to mitigate the natural collinearity problem of these datasets. With this idea in mind, we initially fit the models with original data and then saw whether it is necessary or not to switch to the yearly variations.
 
 
-## DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
+## EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION
 
 Includes three models, one for each non-renewable energy:
-    - DIFF_TOTAL_PETROLEUM  ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
-    - DIFF_TOTAL_SOLID FOSSIL FUELS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
-    - DIFF_TOTAL_NATURAL GAS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
+    - EU_PETROLEUM  ~ EU_GDP + EU_POPULATION
+    - EU_SOLID FOSSIL FUELS ~ EU_GDP + EU_POPULATION
+    - EU_NATURAL GAS ~ EU_GDP + EU_POPULATION
 
 ```{r}
 #Eu total data
@@ -1507,6 +1507,76 @@ colnames(vec_gas)=c("gas_eu","gdp_eu","pop_eu")
 
 vec_gas_pred=vec_oil_pred
 ```
+
+Oil & Petr. total
+```{r}
+consump.oil.petr.gam <- gam(oil_eu ~ s(gdp_eu) + s(pop_eu),
+                           data = vec_oil) 
+summary(consump.oil.petr.gam)
+
+hist(consump.oil.petr.gam$residuals)
+qqnorm(consump.oil.petr.gam$residuals)
+shapiro.test(consump.oil.petr.gam$residuals)
+```
+
+```{r}
+Pacf(
+  consump.oil.petr.gam$residuals
+)
+```
+
+Fossils
+```{r}
+consump.fossils.gam <- gam(fossil_eu ~ s(gdp_eu) + s(pop_eu),
+                           data = vec_fossil) 
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
+```
+
+
+```{r}
+Pacf( 
+  consump.fossils.gam$residuals
+)
+```
+
+Natural gas:
+```{r}
+consump.gas.gam <- gam(gas_eu ~ s(gdp_eu) + s(pop_eu),
+                           data = vec_gas) 
+summary(consump.gas.gam)
+
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
+
+```
+
+```{r}
+Pacf(
+  consump.gas.gam$residuals
+)
+```
+
+
+## DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
+
+Includes three models, one for each non-renewable energy:
+    - DIFF_TOTAL_PETROLEUM  ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
+    - DIFF_TOTAL_SOLID FOSSIL FUELS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
+    - DIFF_TOTAL_NATURAL GAS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
+Ignore it for now
+```{r}
+gdp.train <- gdp.diff.total[1:29]
+pop.train <- pop.diff.total[1:29]
+
+gdp.pred  <- gdp.diff.total[30:40]
+pop.pred  <- pop.diff.total[30:40]
+```
+
 
 
 
@@ -1543,16 +1613,7 @@ vec_gas_pred=vec_fossil_pred
 
 ```
 
-Oil & Petr. total
-```{r}
-consump.oil.petr.gam <- gam(oil_eu ~ s(gdp_eu) + s(pop_eu),
-                           data = vec_oil) 
-summary(consump.oil.petr.gam)
 
-hist(consump.oil.petr.gam$residuals)
-qqnorm(consump.oil.petr.gam$residuals)
-shapiro.test(consump.oil.petr.gam$residuals)
-```
 
 
 Oil & Petr.
@@ -1576,16 +1637,7 @@ Pacf(
   consump.oil.petr.gam$residuals
 )
 ```
-Fossils
-```{r}
-consump.fossils.gam <- gam(fossil_eu ~ s(gdp_eu) + s(pop_eu),
-                           data = vec_fossil) 
-summary(consump.fossils.gam)
 
-hist(consump.fossils.gam$residuals)
-qqnorm(consump.fossils.gam$residuals)
-shapiro.test(consump.fossils.gam$residuals)
-```
 
 
 Fossils:
@@ -1605,16 +1657,7 @@ Pacf(
 )
 ```
 
-Natural gas:
-```{r}
-consump.gas.gam <- gam(gas_eu ~ s(gdp_eu) + s(pop_eu),
-                           data = vec_gas) 
-summary(consump.gas.gam)
 
-hist(consump.gas.gam$residuals)
-qqnorm(consump.gas.gam$residuals)
-shapiro.test(consump.gas.gam$residuals)
-```
 
 
 ```{r}
@@ -1629,9 +1672,7 @@ shapiro.test(consump.gas.gam$residuals)
 ```
 
 ```{r}
-Pacf(
-  consump.gas.gam$residuals
-)
+
 ```
 
 
