@@ -21,6 +21,8 @@ library(splines)
 library(devtools)
 library(tidyr)
 library(jsonlite)
+library(ISLR2)
+library(pbapply)
 # Depth
 #library(DepthProc)
 #library(robustbase)
@@ -1477,12 +1479,12 @@ pop.pred <- pop.total[31:41]
 Since we are working with time series, where there is a strong temporal dependence, from now on each time we are constructing a model we check the correlation of the residuals using the (partial) autocorrelation function. This is important to understand whether the model is able to capture the relations in original data or whether it is better to perform a first order differentiation to mitigate the natural collinearity problem of these datasets. With this idea in mind, we initially fit the models with original data and then saw whether it is necessary or not to switch to the yearly variations.
 
 
-## EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION
+## EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
 
 Includes three models, one for each non-renewable energy:
-    - EU_PETROLEUM  ~ EU_GDP + EU_POPULATION
-    - EU_SOLID FOSSIL FUELS ~ EU_GDP + EU_POPULATION
-    - EU_NATURAL GAS ~ EU_GDP + EU_POPULATION
+    - EU_PETROLEUM  ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
+    - EU_SOLID FOSSIL FUELS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
+    - EU_NATURAL GAS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
 
 ```{r}
 #Eu total data
@@ -1510,7 +1512,17 @@ vec_gas_pred=vec_oil_pred
 
 Oil & Petr. total
 ```{r}
-consump.oil.petr.gam <- gam(oil_eu ~ s(gdp_eu) + s(pop_eu),
+consump.oil.petr.gam <- gam(oil_eu ~ s(gdp_eu,bs='cr') + s(pop_eu,bs='cr') +s(I(gdp_eu*pop_eu),bs='cr'),
+                           data = vec_oil) 
+summary(consump.oil.petr.gam)
+
+hist(consump.oil.petr.gam$residuals)
+qqnorm(consump.oil.petr.gam$residuals)
+shapiro.test(consump.oil.petr.gam$residuals)
+```
+We can discard the gdp
+```{r}
+consump.oil.petr.gam <- gam(oil_eu ~ s(pop_eu,bs='cr') + s(I(gdp_eu*pop_eu),bs='cr'),
                            data = vec_oil) 
 summary(consump.oil.petr.gam)
 
@@ -1520,6 +1532,13 @@ shapiro.test(consump.oil.petr.gam$residuals)
 ```
 
 ```{r}
+Acf(
+  consump.oil.petr.gam$residuals
+)
+```
+
+
+```{r}
 Pacf(
   consump.oil.petr.gam$residuals
 )
@@ -1527,7 +1546,27 @@ Pacf(
 
 Fossils
 ```{r}
-consump.fossils.gam <- gam(fossil_eu ~ s(gdp_eu) + s(pop_eu),
+consump.fossils.gam <- gam(fossil_eu ~ s(gdp_eu,bs='cr') + s(pop_eu,bs='cr') + s(I(gdp_eu*pop_eu),bs='cr'),
+                           data = vec_fossil) 
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
+```
+Population in this case is not significant
+
+```{r}
+consump.fossils.gam <- gam(fossil_eu ~ s(gdp_eu,bs='cr') + s(I(gdp_eu*pop_eu),bs='cr'),
+                           data = vec_fossil) 
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
+```
+```{r}
+consump.fossils.gam <- gam(fossil_eu ~ s(I(gdp_eu*pop_eu),bs='cr'),
                            data = vec_fossil) 
 summary(consump.fossils.gam)
 
@@ -1537,6 +1576,13 @@ shapiro.test(consump.fossils.gam$residuals)
 ```
 
 
+
+```{r}
+Acf( 
+  consump.fossils.gam$residuals
+)
+```
+
 ```{r}
 Pacf( 
   consump.fossils.gam$residuals
@@ -1545,7 +1591,7 @@ Pacf(
 
 Natural gas:
 ```{r}
-consump.gas.gam <- gam(gas_eu ~ s(gdp_eu) + s(pop_eu),
+consump.gas.gam <- gam(gas_eu ~ s(gdp_eu,bs='cr') + s(pop_eu,bs='cr') + s(I(gdp_eu*pop_eu),bs='cr'),
                            data = vec_gas) 
 summary(consump.gas.gam)
 
@@ -1554,21 +1600,51 @@ qqnorm(consump.gas.gam$residuals)
 shapiro.test(consump.gas.gam$residuals)
 
 ```
+Let's start quitting gdp
+
+```{r}
+consump.gas.gam <- gam(gas_eu ~ s(pop_eu,bs='cr') + s(I(gdp_eu*pop_eu),bs='cr'),
+                           data = vec_gas) 
+summary(consump.gas.gam)
+
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
+```
+
+Discard population as well
+
+```{r}
+consump.gas.gam <- gam(gas_eu ~ s(I(gdp_eu*pop_eu),bs='cr'),
+                           data = vec_gas) 
+summary(consump.gas.gam)
+
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
+```
+
+
+```{r}
+Acf(
+  consump.gas.gam$residuals
+)
+```
 
 ```{r}
 Pacf(
   consump.gas.gam$residuals
 )
 ```
+Since the correlations are not negligible, we pass to first order differences
 
-
-## DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
+## DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
 
 Includes three models, one for each non-renewable energy:
-    - DIFF_TOTAL_PETROLEUM  ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
-    - DIFF_TOTAL_SOLID FOSSIL FUELS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
-    - DIFF_TOTAL_NATURAL GAS ~ DIFF_TOTAL_GDP + DIFF_TOTAL_POPULATION
-Ignore it for now
+    - DIFF_EU_PETROLEUM  ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
+    - DIFF_EU_SOLID FOSSIL FUELS ~ DIFF_EU_GDP + DIFF_EU_POPULATION +                                                                            DIFF_EU_GDP:DIFF_EU_POPULATION
+    - DIFF_EU_NATURAL GAS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
+
 ```{r}
 gdp.train <- gdp.diff.total[1:29]
 pop.train <- pop.diff.total[1:29]
@@ -1581,10 +1657,8 @@ pop.pred  <- pop.diff.total[30:40]
 
 
 ```{r}
-#ignore it for now
-# REVIEW: take into account country dummy variable??
 
-vec_oil <- t(rbind(consump.oil.petr.diff.c,gdp.train,pop.train))
+vec_oil <- t(rbind(consump.oil.petr.diff.total,gdp.train,pop.train))
 vec_oil <- data.frame(vec_oil)
 colnames(vec_oil) <- c("dif_oil_eu","dif_gdp_eu","dif_pop_eu")
 
@@ -1594,17 +1668,16 @@ vec_oil_pred <- data.frame(vec_oil_pred)
 
 colnames(vec_oil_pred) <- c("dif_gdp_eu","dif_pop_eu")
 
-vec_fossil <- t(rbind(consump.fossils.diff.c,gdp.train, pop.train))
+vec_fossil <- t(rbind(consump.fossils.diff.total,gdp.train, pop.train))
 vec_fossil <- data.frame(vec_fossil)
 colnames(vec_fossil) <- c("dif_fossil_eu","dif_gdp_eu","dif_pop_eu")
 
 
-vec_fossil_pred <- cbind(gdp.pred, pop.pred)
-vec_fossil_pred <- data.frame(vec_fossil_pred)
+vec_fossil_pred = vec_oil_pred
 
 colnames(vec_fossil_pred) <- c("dif_gdp_eu","dif_pop_eu")
 
-vec_gas <- t(rbind(consump.gas.diff.c,gdp.train, pop.train))
+vec_gas <- t(rbind(consump.gas.diff.total,gdp.train, pop.train))
 vec_gas <- data.frame(vec_gas)
 colnames(vec_gas) <- c("dif_gas_eu","dif_gdp_eu","dif_pop_eu")
 
@@ -1618,20 +1691,78 @@ vec_gas_pred=vec_fossil_pred
 
 Oil & Petr.
 ```{r}
-#ignore it for now
-consump.oil.petr.gam <- gam(dif_oil_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
-                           data = vec_oil) 
+consump.oil.petr.gam <- gam(dif_oil_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr') + s(I(dif_gdp_eu*dif_pop_eu),bs='cr'),data = vec_oil) 
+
 summary(consump.oil.petr.gam)
 
 hist(consump.oil.petr.gam$residuals)
 qqnorm(consump.oil.petr.gam$residuals)
 shapiro.test(consump.oil.petr.gam$residuals)
 ```
+We quit the interaction term
+
 ```{r}
+consump.oil.petr.gam <- gam(dif_oil_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr'),data = vec_oil) 
+
+summary(consump.oil.petr.gam)
+
+hist(consump.oil.petr.gam$residuals)
+qqnorm(consump.oil.petr.gam$residuals)
+shapiro.test(consump.oil.petr.gam$residuals)
+```
+Quit pop as well
+
+
+```{r}
+consump.oil.petr.gam <- gam(dif_oil_eu ~ s(dif_gdp_eu,bs='cr') ,data = vec_oil) 
+
+summary(consump.oil.petr.gam)
+
+hist(consump.oil.petr.gam$residuals)
+qqnorm(consump.oil.petr.gam$residuals)
+shapiro.test(consump.oil.petr.gam$residuals)
+```
+
+We now test whether the smooth function is needed for the two covariates or if it is sufficient (or even better...) to consider a linear relationship
+
+```{r}
+consump.oil.petr.gam.1 <- gam(dif_oil_eu ~ s(dif_gdp_eu,bs='cr') + dif_pop_eu,data = vec_oil) 
+
+summary(consump.oil.petr.gam.1)
+
+hist(consump.oil.petr.gam.1$residuals)
+qqnorm(consump.oil.petr.gam.1$residuals)
+shapiro.test(consump.oil.petr.gam.1$residuals)
+```
+```{r}
+consump.oil.petr.gam.2 <- gam(dif_oil_eu ~ dif_gdp_eu + s(dif_pop_eu,bs='cr'),data = vec_oil) 
+
+summary(consump.oil.petr.gam.2)
+
+hist(consump.oil.petr.gam.2$residuals)
+qqnorm(consump.oil.petr.gam.2$residuals)
+shapiro.test(consump.oil.petr.gam.2$residuals)
+```
+
+```{r}
+consump.oil.petr.gam.3 <- gam(dif_oil_eu ~ dif_gdp_eu + dif_pop_eu,data = vec_oil) 
+
+summary(consump.oil.petr.gam.3)
+
+hist(consump.oil.petr.gam.3$residuals)
+qqnorm(consump.oil.petr.gam.3$residuals)
+shapiro.test(consump.oil.petr.gam.3$residuals)
+```
+The last two very similar, we stick with number 2
+
+
+```{r}
+consump.oil.petr.gam=consump.oil.petr.gam.2
 Acf(
   consump.oil.petr.gam$residuals
 )
 ```
+
 ```{r}
 Pacf(
   consump.oil.petr.gam$residuals
@@ -1642,15 +1773,43 @@ Pacf(
 
 Fossils:
 ```{r}
-#ignore it for now
-consump.fossils.gam <- gam(dif_fossil_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
-                           data = vec_fossil) 
+consump.fossils.gam <- gam(dif_fossil_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr') + s(I(dif_gdp_eu*dif_pop_eu),bs='cr'),data = vec_fossil) 
+
 summary(consump.fossils.gam)
 
 hist(consump.fossils.gam$residuals)
 qqnorm(consump.fossils.gam$residuals)
 shapiro.test(consump.fossils.gam$residuals)
 ```
+Quit the interaction
+
+```{r}
+consump.fossils.gam <- gam(dif_fossil_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr'),data = vec_fossil) 
+
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
+```
+Quit gdp as well
+
+```{r}
+consump.fossils.gam <- gam(dif_fossil_eu ~ s(dif_pop_eu,bs='cr'),data = vec_fossil) 
+
+summary(consump.fossils.gam)
+
+hist(consump.fossils.gam$residuals)
+qqnorm(consump.fossils.gam$residuals)
+shapiro.test(consump.fossils.gam$residuals)
+```
+
+```{r}
+Acf( 
+  consump.fossils.gam$residuals
+)
+```
+
 ```{r}
 Pacf( 
   consump.fossils.gam$residuals
@@ -1661,8 +1820,7 @@ Pacf(
 
 
 ```{r}
-#ignore it for now
-consump.gas.gam <- gam(dif_gas_eu ~ s(dif_gdp_eu) + s(dif_pop_eu),
+consump.gas.gam <- gam(dif_gas_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr') + s(I(dif_gdp_eu*dif_pop_eu),bs='cr'),
                            data = vec_gas) 
 summary(consump.gas.gam)
 
@@ -1670,12 +1828,65 @@ hist(consump.gas.gam$residuals)
 qqnorm(consump.gas.gam$residuals)
 shapiro.test(consump.gas.gam$residuals)
 ```
+Quit gdp
 
 ```{r}
+consump.gas.gam <- gam(dif_gas_eu ~ s(dif_pop_eu,bs='cr') + s(I(dif_gdp_eu*dif_pop_eu),bs='cr'),
+                           data = vec_gas) 
+summary(consump.gas.gam)
 
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
+```
+Quit interaction as well
+```{r}
+consump.gas.gam <- gam(dif_gas_eu ~ s(dif_pop_eu,bs='cr'),
+                           data = vec_gas) 
+summary(consump.gas.gam)
+
+hist(consump.gas.gam$residuals)
+qqnorm(consump.gas.gam$residuals)
+shapiro.test(consump.gas.gam$residuals)
+```
+Let's try again with some linear contributions
+
+```{r}
+consump.gas.gam.1 <- gam(dif_gas_eu ~ dif_pop_eu + s(I(dif_gdp_eu*dif_pop_eu),bs='cr'),
+                           data = vec_gas) 
+summary(consump.gas.gam.1)
+
+hist(consump.gas.gam.1$residuals)
+qqnorm(consump.gas.gam.1$residuals)
+shapiro.test(consump.gas.gam.1$residuals)
 ```
 
+```{r}
+consump.gas.gam.2 <- gam(dif_gas_eu ~ s(dif_pop_eu,bs='cr') + dif_gdp_eu:dif_pop_eu,
+                           data = vec_gas) 
+summary(consump.gas.gam.2)
 
+hist(consump.gas.gam.2$residuals)
+qqnorm(consump.gas.gam.2$residuals)
+shapiro.test(consump.gas.gam.2$residuals)
+```
+
+```{r}
+consump.gas.gam.3 <- gam(dif_gas_eu ~ dif_pop_eu + dif_gdp_eu:dif_pop_eu,
+                           data = vec_gas) 
+summary(consump.gas.gam.3)
+
+hist(consump.gas.gam.3$residuals)
+qqnorm(consump.gas.gam.3$residuals)
+shapiro.test(consump.gas.gam.3$residuals)
+```
+We select model number 3
+
+```{r}
+consump.gas.gam=consump.gas.gam.3
+```
+
+Core ok until here!!!!
 
 Predict for 2020-2030
 ```{r}
