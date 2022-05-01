@@ -1886,7 +1886,6 @@ We select model number 3
 consump.gas.gam=consump.gas.gam.3
 ```
 
-Core ok until here!!!!
 
 Predict for 2020-2030
 ```{r}
@@ -1896,39 +1895,34 @@ consump.oil.petr.gam.preds <- predict(consump.oil.petr.gam, newdata=vec_oil_pred
 
 consump.fossils.gam.preds <- predict(consump.fossils.gam, newdata=vec_fossil_pred, se=T)
 
-consump.gas.gam.preds <- predict(consump.gas.gam, newdata=vec_gas_pred, se=T)
+consump.gas.gam.preds <- predict(consump.gas.gam, newdata=data.frame(vec_gas_pred,inter=vec_gas_pred$dif_gdp_eu*vec_gas_pred$dif_pop_eu), se=T)
 ```
+
 
 Plot predictions
 ```{r}
-
 # See graphs
-with(vec_oil, plot(seq(1990,2019) ,oil_eu ,xlim=c(1990,2030),ylim=c(2e+7,2.8e+7),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
+with(vec_oil, plot(seq(1991,2019) ,dif_oil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
 points(seq(2020,2030), consump.oil.petr.gam.preds$fit ,lwd =2, col ="red")
+lines(seq(1991,2019),consump.oil.petr.gam$fitted.values,lwd=1,col="blue")
 
-with(vec_fossil, plot(seq(1990,2019) ,fossil_eu ,xlim=c(1990,2030),ylim=c(0.3e+7,3.6e+7),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Fossil fuels'))
+
+with(vec_fossil, plot(seq(1991,2019) ,dif_fossil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Fossil fuels'))
 points(seq(2020,2030), consump.fossils.gam.preds$fit ,lwd =2, col ="red")
+lines(seq(1991,2019),consump.fossils.gam$fitted.values,lwd=1,col="blue")
 
-with(vec_gas, plot(seq(1990,2019) ,gas_eu ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Natural Gas'))
+
+with(vec_gas, plot(seq(1991,2019) ,dif_gas_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Natural Gas'))
 points(seq(2020,2030), consump.gas.gam.preds$fit ,lwd =2, col ="red")
+lines(seq(1991,2019),consump.gas.gam$fitted.values,lwd=1,col="blue")
 
 ```
 
-```{r}
-#ignore it for now
-# See graphs
-with(vec_oil, plot(seq(1991,2019) ,dif_oil_eu ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
-points(seq(2020,2030), consump.oil.petr.gam.preds$fit ,lwd =2, col ="red")
+We proceeded with yearly variations framework also for the following models
 
-with(vec_fossil, plot(seq(1991,2019) ,dif_fossil_eu ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Fossil fules.'))
-points(seq(2020,2030), consump.fossils.gam.preds$fit ,lwd =2, col ="red")
+Core ok until here!!!!
 
-with(vec_gas, plot(seq(1991,2019) ,dif_gas_eu ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Natural Gas'))
-points(seq(2020,2030), consump.gas.gam.preds$fit ,lwd =2, col ="red")
-
-```
-
-## DIFF_TOTAL_RENEWABLE CONSUMPTIONS  ~ DIFF_TOTAL_PETROLEUM  + DIFF_TOTAL_SOLID FOSSILFUELS + DIFF_TOTAL_NATURAL GAS:
+## DIFF_EU_RENEWABLE CONSUMPTIONS  ~ DIFF_EU_PETROLEUM  + DIFF_EU_SOLID FOSSILFUELS + DIFF_EU_NATURAL GAS:
 
 Let's try with original data, total values
 ```{r}
