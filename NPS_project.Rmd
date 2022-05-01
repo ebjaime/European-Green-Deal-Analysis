@@ -1920,34 +1920,30 @@ lines(seq(1991,2019),consump.gas.gam$fitted.values,lwd=1,col="blue")
 
 We proceeded with yearly variations framework also for the following models
 
-Core ok until here!!!!
 
 ## DIFF_EU_RENEWABLE CONSUMPTIONS  ~ DIFF_EU_PETROLEUM  + DIFF_EU_SOLID FOSSILFUELS + DIFF_EU_NATURAL GAS:
 
 Let's try with original data, total values
 ```{r}
 # Join all energies for common DF
-vec_re <- cbind(as.numeric(consump.renew.europe[1,]),vec_oil$oil_eu,vec_fossil$fossil_eu, vec_gas$gas_eu)
-vec_re <- data.frame(vec_re)
-colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
+#vec_re <- cbind(as.numeric(consump.renew.europe[1,]),vec_oil$oil_eu,vec_fossil$fossil_eu, vec_gas$gas_eu)
+#vec_re <- data.frame(vec_re)
+#colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
 ```
 
+Variations version
 ```{r}
-#ignore it for now
-
 # Join all energies for common DF
-vec_re <- cbind(consump.renew.diff.c[,1],consump.oil.petr.diff.c[,1],consump.fossils.diff.c[,1], consump.gas.diff.c[,1])
-for (j in 2:29){
-    v <- cbind(consump.renew.diff.c[,j],consump.oil.petr.diff.c[,j],consump.fossils.diff.c[,j], consump.gas.diff.c[,j])
-    vec_re <- rbind(vec_re,v)
-}
+vec_re <- cbind(as.numeric(consump.renew.diff.total[1,]),vec_oil$dif_oil_eu,vec_fossil$dif_fossil_eu, vec_gas$dif_gas_eu)
+
 vec_re <- data.frame(vec_re)
 colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
 ```
+Core ok until here!!!!
 
-
+We need smoothing also on oil,fossil fuels and natural gas differences, to  fit a more complex mode with interactions
 ```{r}
-consump.renew.gam <- gam(value_re ~ s(value_oil) + s(value_ff) + s(value_ng), data=vec_re)
+consump.renew.gam <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr'), data=vec_re)
 
 summary(consump.renew.gam)
 
