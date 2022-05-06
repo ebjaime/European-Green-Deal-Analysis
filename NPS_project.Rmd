@@ -8,7 +8,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # TITLE
-TODO: Rerun everything
 Load necessary libraries:
 
 ```{r}
@@ -82,6 +81,52 @@ preprocess <- function(df, start_nrows=6, end_nrows=2, tj=T) {
     
     return(df)
 }
+
+
+# REVIEW: Function for creating a smoothing procedure for any data given an interval:
+# Interval corresponds to the frequency in each year: 2 each 6 months
+smoothing_procedure <- function (data, from, to, write_to=NA, interval=3, row_names=NULL){
+    
+    new.data <- data.frame(matrix(ncol =length(from:to), nrow = 0))
+    
+    comb.year.grid <- seq(from, to, 1)
+    
+    for(c in 1:dim(data)[1]){ # For each country
+        
+        data.data <- as.numeric(data[c, as.character(from:to)]) 
+        data.data.nans <- is.na(data.data)
+        n.comb.year.grid <- comb.year.grid[!data.data.nans]
+        
+        times_basis <- n.comb.year.grid 
+        knots       <- c(n.comb.year.grid) # Location of knots
+        n_knots     <- length(knots) # Number of knots
+        n_order     <- 2 # order of basis functions: cubic bspline: order = 3 + 1
+        n_basis     <- length(knots) + n_order - 2;
+        
+        basis <- create.bspline.basis(c(min(times_basis),max(times_basis)),n_basis,n_order,knots)
+        
+        ys <- smooth.basis(argvals=times_basis, y=data.data[!data.data.nans], fdParobj = basis)
+        
+        xfd <- ys$fd
+        
+        data.yby <- eval.fd(seq(min(n.comb.year.grid),max(n.comb.year.grid), 1/interval), xfd) # Obtain data year by year
+        
+        new.data <- rbind(new.data, c( rep(NA, ((to-from) + 1 - length(n.comb.year.grid))*interval),
+                                       data.yby))
+    }
+
+    # Rename columns
+    colnames(new.data) <- c(seq(from, to, 1/interval))   
+    
+    rownames(new.data) <- row_names
+    
+    
+    if(!is.na(write_to)){
+        write.xlsx(new.data, write_to, overwrite = T)
+    }
+    return(new.data)
+}
+
 ```
 
 
@@ -307,14 +352,13 @@ p.values.ff <- numeric(length(countries.list)) # Fossil fuels
 p.values.op <- numeric(length(countries.list)) # Oil&Petr.
 p.values.ng <- numeric(length(countries.list)) # Natural gas 
 p.values.re <- numeric(length(countries.list)) # RE
+# FIXME: Error in shapiro.test(t(consump.gas.diff)[, c]) :  all 'x' values are identical
 for(c in 1:length(countries.list)){
     p.values.ff[c] <- shapiro.test(t(consump.fossils.diff)[,c])$p.value
     p.values.op[c] <- shapiro.test(t(consump.oil.petr.diff)[,c])$p.value
     p.values.ng[c] <- shapiro.test(t(consump.gas.diff)[,c])$p.value # Ignore errors
     p.values.re[c] <- shapiro.test(t(consump.renew.diff)[,c])$p.value
 
-
-    
 }
 hist(p.values.ff,breaks=20)
 hist(p.values.op,breaks=20)
@@ -382,6 +426,7 @@ pb <- progress_bar$new(
     format = "  processing [:bar] :percent eta: :eta",
     total = B, clear = FALSE)
 
+#FIXME: Error in pi[[j]] : subscript out of bounds
 for(perm in 1:B){
     t_pooled = rbind(consump.gas.countries, consump.oil.petr.countries)
     permutation = sample(n)
@@ -430,6 +475,8 @@ pb <- progress_bar$new(
     format = "  processing [:bar] :percent eta: :eta",
     total = B, clear = FALSE)
 
+#FIXME: Error in pi[[j]] : subscript out of bounds
+
 for(perm in 1:B){
     t_pooled = rbind(consump.fossils.countries, consump.oil.petr.countries)
     permutation = sample(n)
@@ -466,6 +513,7 @@ What about using year-to-year variates? Does the renewable consumption growth fo
 # RE vs OP ----------------------------------------------------------------
 # Use year by year change of each energy (RE vs OP (or NG or FF))
 
+#FIXME: Error in Ops.data.frame(consump.fossils.countries[, ] + consump.gas.countries[,  : ‘+’ only defined for equally-sized data frames
 mean.consump.nonrenew <-(consump.fossils.countries[,]+consump.gas.countries[,]+consump.oil.petr.countries[,] )/3
 mean.consump.nonrenew.mean=colMeans(mean.consump.nonrenew)
 
@@ -872,6 +920,18 @@ use_hydro_elec.diff.c <- use_hydro_elec.diff.c[rn,]
 ```
 
 
+
+
+
+REVIEW: Smoothing for solar, wind and hydro to obtain data for each month:
+```{r}
+use_solar_elec.diff.s <- smoothing_procedure(use_solar_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_solar_elec.diff.c))
+use_wind_elec.diff.s <- smoothing_procedure(use_wind_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_wind_elec.diff.c))
+use_hydro_elec.diff.s <- smoothing_procedure(use_hydro_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_hydro_elec.diff.c))
+```
+
+
+
 ```{r}
 #using EU total values
 gdp.elec.train <- gdp[,as.character(seq(2004,2019))]
@@ -990,7 +1050,7 @@ c_preds.wind.total <- conformal.pred(
 
 #Error in gam(y ~ s(gdp) + s(pop), data = train_data) : Model has more coefficients than data
 
-#More data are necessary to work with total values, can we apply smoothing, creating data each 3 months? We need this to predict wind, solar and hydro electricity production, so consequently also gdp and pop. This problem occurs only for electricity data, since they begin in 2004, while for the following models there should not be this problem.
+#FIXME: More data are necessary to work with total values, can we apply smoothing, creating data each 3 months? We need this to predict wind, solar and hydro electricity production, so consequently also gdp and pop. This problem occurs only for electricity data, since they begin in 2004, while for the following models there should not be this problem.
 #Using all the countries brings to ugly plots in conformal predictions, so we worked with total EU values
 ```
 
@@ -1445,6 +1505,19 @@ Keeping only European countries for which we have complete data of Gdp, Populati
 # Not in SSP GDP data and in EUstat data
 discard.idx <- rownames(consump.oil.petr.diff[-c(1,2,3),])%in%rownames(gdp.diff)
 discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
+
+# REVIEW: We smooth the non-renewable data to obtain values for each month of each year
+consump.oil.petr.diff.s <- consump.oil.petr.diff[-1,]
+consump.fossils.diff.s <- consump.fossils.diff[-1,]
+consump.gas.diff.s <- consump.gas.diff[-1,]
+
+colnames(consump.oil.petr.diff.s) <- consump.oil.petr.diff[1,]
+colnames(consump.fossils.diff.s) <- consump.fossils.diff[1,]
+colnames(consump.gas.diff.s) <- consump.gas.diff[1,]
+
+consump.oil.petr.diff.s <- smoothing_procedure(consump.oil.petr.diff.s, 1991, 2019, row_names = rownames(consump.oil.petr.diff.s))
+consump.gas.diff.s <- smoothing_procedure(consump.gas.diff.s, 1991, 2019, row_names = rownames(consump.gas.diff.s))
+consump.fossils.diff.s <- smoothing_procedure(consump.fossils.diff.s, 1991, 2019, row_names = rownames(consump.fossils.diff.s))
 
 # We discard the countries which are not going to be used, as well as the EU totals 
 consump.oil.petr.diff.total <- consump.oil.petr.diff[3,]
