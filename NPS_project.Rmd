@@ -44,6 +44,7 @@ library(forecast)
 
 B=10000
 seed=42
+set.seed(seed)
 ```
 
 ### Preprocessing of data
@@ -172,7 +173,6 @@ consump.fossils.p[-1,] <- consump.fossils.p[-1,] * 25 #  Calorific power of Foss
                                  
 consump.oil.petr.p <- preprocess(consump.oil.petr[,-32], tj=F) # without 2020
 consump.gas.p      <- preprocess(consump.gas[,-32], tj=T) # without 2020
-
 
 consump.renew.1.p <- preprocess(consump.renew.1[,-32])
 consump.renew.2.p <- preprocess(consump.renew.2[,-32])
@@ -396,13 +396,50 @@ matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
 
 legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas"), col=1:3, pch=2)
 ```
-We start with a permutational MANOVA to see whether the three #TODO: MANOVA
+We start with a permutational MANOVA to see whether the three non renewable sources have the same distribution #TODO: MANOVA
+
+```{r}
+
+consump.nonrenew.countries=rbind(consump.oil.petr.p[5:39,],
+                                 consump.fossils.p[5:39,],consump.gas.p[5:39,])
+
+nonrenew.source <- c(rep("Oil_Petr",35),rep("Fossil_Fuels",35),rep("Natural_Gas",35))
+nonrenew.source <- factor(nonrenew.source)
+```
 
 
 
-Renewable consumption and Fossil Fuels are very different from oil & petr. and natural gas consumption.
-But do these last two follow the same distribution?
+```{r}
+fit <- manova(as.matrix(consump.nonrenew.countries) ~ nonrenew.source)
+print(summary.manova(fit,test="Wilks")) 
+T0 <- -summary.manova(fit,test="Wilks")$stats[1,2]
+T0
+```
 
+
+```{r}
+set.seed(seed)
+T_stat <- numeric(B)
+n=dim(consump.nonrenew.countries)[1]
+
+for(perm in 1:B){
+  # choose random permutation
+  permutation <- sample(1:n)
+  source.perm <- nonrenew.source[permutation]
+  fit.perm <- manova(as.matrix(consump.nonrenew.countries) ~ source.perm)
+  T_stat[perm] <- -summary.manova(fit.perm,test="Wilks")$stats[1,2]
+}
+
+hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30,main="Wilks stat permutational distribution")
+abline(v=T0,col=3,lwd=2)
+
+plot(ecdf(T_stat),xlim=c(-2,1),main="Wilk stat ecdf")
+abline(v=T0,col=3,lwd=4)
+
+# p-value
+p_val <- sum(T_stat>=T0)/B
+p_val
+```
 
 ```{r}
 
@@ -730,7 +767,6 @@ Seems like Hydro has less variations than the other two, let's proceed to statis
 
 Observed statistic:
 ```{r}
-#REVIEW
 fit <- manova(as.matrix(use_principal.diff) ~ source)
 print(summary.manova(fit,test="Wilks")) 
 T0 <- -summary.manova(fit,test="Wilks")$stats[1,2]
@@ -772,7 +808,7 @@ solar.mean = colMeans(use_solar_elec.diff[4:40,])
 years_04_19=as.numeric(colnames(use_wind_elec)) #years from 2004 to 2019
 years_05_19=years_04_19[-1]
 
-matplot(years_05_19,t(rbind(wind.mean,solar.mean)), type='l', col=c("green","red"), lty=1,xlab="Year",ylab="Gigawatt-hour",main="Mean electricity production")
+matplot(years_05_19,t(rbind(wind.mean,solar.mean)), type='l', col=c("green","red"), lty=1,xlab="Year",ylab="Gigawatt-hour",main="Mean yearly variations of electricity production")
 legend("topleft",legend=c("Wind","Solar"),col=c(3,2),pch=1)
 ```
 
@@ -816,14 +852,11 @@ pvalue
 
 ### Conformal prediction on types of RE for electricity production 
 
-The three conformal models will be:
-    - derive DIFF_SOLAR ~ DIFF_GDP + DIFF_POPULATION
-    - derive DIFF_WIND ~ DIFF_GDP + DIFF_POPULATION
-    - derive DIFF_HIDRO ~ DIFF_GDP + DIFF_POPULATION
+To understand how Hydro, Wind and Solar sources of electricity will grow with time we proceeded with some prediction of the amount of electricity coming from each of them, in function of Gdp, population and their interaction. 
     
 For this purpose, we will first have to import the SSP data from our dataset, which was obtained by retrieving the year to year values from the original data (more details in "src/preprocessing_SSP.Rmd").
-We will also calculate the differences year to year.
 
+We also construct variations datasets that will prove to be useful in the near future.
 
 ```{r}
 gdp <- read.xlsx("data/ssp_iiasa_YtY_gdp.xlsx", 1)
@@ -858,7 +891,7 @@ gdp.diff[is.na(gdp.diff)] <- 0
 ```
 
 EU totals - original data
-For the moment we are trying to make CO2 predictions with total original data (there's also code for the differences, for the moment let's ignore it)
+For the moment we are trying to make predictions for the three renewable electricity sources with original data
 ```{r}
 # Not in SSP GDP data and in electricity data
 discard.idx <- rownames(use_solar_elec[-c(1,2,3),])%in%rownames(gdp)
@@ -889,13 +922,120 @@ pop.total <- as.numeric(colSums(pop))
 
 Montenegro and Albania should be discarded as they have NaN values or no information available for either population or GDP (see "preprocessing_SSP.Rmd"). Kosovo should be discarded as it is not recognized by the SSP predictions.
 
-First order differences - ignore it for now
+
+
+Since we have data only from 2004 (instead of 1990) to 2019, more points are needed to construct predicting models. We generate these points through a smoothing procedure, obtaining monthly data.
+
+
+Smoothing for solar, wind and hydro to obtain data for each month (total values)
+```{r}
+use_solar_elec.total.s <- smoothing_procedure(use_solar_elec.total, 2004, 2019, interval=2, row_names = rownames(use_solar_elec.total))
+use_wind_elec.total.s <- smoothing_procedure(use_wind_elec.total, 2004, 2019, interval=2, row_names = rownames(use_wind_elec.total))
+use_hydro_elec.total.s <- smoothing_procedure(use_hydro_elec.total, 2004, 2019, interval=2, row_names = rownames(use_hydro_elec.total))
+```
+
+
+
+```{r}
+#using EU total values
+gdp.elec.train <- gdp[,as.character(seq(2004,2019))]
+pop.elec.train <- pop[,as.character(seq(2004,2019))]
+gdp.elec.train = colSums(gdp.elec.train)
+pop.elec.train = colSums(pop.elec.train)
+
+gdp.elec.pred  <- gdp[,as.character(seq(2020,2030))]
+pop.elec.pred  <- pop[,as.character(seq(2020,2030))]
+gdp.elec.pred = colSums(gdp.elec.pred)
+pop.elec.pred = colSums(pop.elec.pred)
+```
+
+
+Smoothing on Gdp and Population (total values)
+```{r}
+
+gdp.elec.train.s <- smoothing_procedure(t(data.frame(gdp.elec.train)), 2004, 2019, interval=2)
+pop.elec.train.s <- smoothing_procedure(t(data.frame(pop.elec.train)), 2004, 2019, interval=2)
+
+gdp.elec.pred.s <- smoothing_procedure(t(data.frame(gdp.elec.pred)), 2020, 2030, interval=2)
+pop.elec.pred.s <- smoothing_procedure(t(data.frame(pop.elec.pred)), 2020, 2030, interval=2)
+
+```
+
+
+```{r}
+#vectors for EU total data
+vec_train = cbind(as.numeric(gdp.elec.train.s), as.numeric(pop.elec.train.s))
+vec_train=data.frame(vec_train)
+colnames(vec_train)=c("gdp","pop")
+
+vec_test = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
+vec_test=data.frame(vec_test)
+colnames(vec_test)=c("gdp","pop")
+
+vec_train
+```
+
+We first tried to construct models using original data and checked the correlation of the residuals using the (partial) autocorrelation function, obtaining as we will see high correlation values.
+
+
+Let's find the adequate model to use for conformal prediction
+```{r}
+tr_data=data.frame(t(use_wind_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+Pacf(model_gam$residuals)
+```
+
+```{r}
+tr_data=data.frame(t(use_solar_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+Pacf(model_gam$residuals)
+```
+
+```{r}
+tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+Pacf(model_gam$residuals)
+```
+
+Differences are much needed...
+
+Since working with original data gave us residuals with high correlations, we decided to fit models using the year to year variations. We construct some GAM models on which we perform conformal prediction.
+Each time we search for the best GAM model by looking at the significance of the covariates and the adjusted R squared.
+
+First order differences
 ```{r}
 # Not in SSP GDP data and in electricity data
 discard.idx <- rownames(use_solar_elec[-c(1,2,3),])%in%rownames(gdp.diff)
 discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
 
-# We discard the countries which are not going to be used, as well as the EU totals 
+# We discard the countries which are not going to be used 
 use_solar_elec.diff.c <- use_solar_elec.diff[c(F,F,F,discard.idx),]
 use_wind_elec.diff.c <- use_wind_elec.diff[c(F,F,F,discard.idx),]
 use_hydro_elec.diff.c <- use_hydro_elec.diff[c(F,F,F,discard.idx),]
@@ -917,90 +1057,192 @@ pop.diff <- pop.diff[rn,]
 use_solar_elec.diff.c <- use_solar_elec.diff.c[rn,]
 use_wind_elec.diff.c <- use_wind_elec.diff.c[rn,]
 use_hydro_elec.diff.c <- use_hydro_elec.diff.c[rn,]
+
 ```
 
 
-
-
-
-REVIEW: Smoothing for solar, wind and hydro to obtain data for each month:
+Smoothing for solar, wind and hydro to obtain data for each month (variations)
 ```{r}
 use_solar_elec.diff.s <- smoothing_procedure(use_solar_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_solar_elec.diff.c))
 use_wind_elec.diff.s <- smoothing_procedure(use_wind_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_wind_elec.diff.c))
 use_hydro_elec.diff.s <- smoothing_procedure(use_hydro_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_hydro_elec.diff.c))
 ```
 
-
-
 ```{r}
-#using EU total values
-gdp.elec.train <- gdp[,as.character(seq(2004,2019))]
-pop.elec.train <- pop[,as.character(seq(2004,2019))]
-gdp.elec.train = colSums(gdp.elec.train)
-pop.elec.train = colSums(pop.elec.train)
+#obtaining EU values
+gdp.diff.total=t(data.frame(colSums(gdp.diff)))
+pop.diff.total=t(data.frame(colSums(pop.diff)))
 
-gdp.elec.pred  <- gdp[,as.character(seq(2020,2030))]
-pop.elec.pred  <- pop[,as.character(seq(2020,2030))]
-gdp.elec.pred = colSums(gdp.elec.pred)
-pop.elec.pred = colSums(pop.elec.pred)
-```
-
-
-
-```{r}
-#ignore it for now
-gdp.elec.train <- gdp.diff[,as.character(seq(2005,2019))]
-pop.elec.train <- pop.diff[,as.character(seq(2005,2019))]
-
-gdp.elec.pred  <- gdp.diff[,as.character(seq(2020,2030))]
-pop.elec.pred  <- pop.diff[,as.character(seq(2020,2030))]
-
-```
-
-Create dummy variables for countries (simply a numerical sequence) to deal with national production dependence ("Country Effect")
-
-```{r}
-#ignore it for now
-dummy.country <- seq(1,dim(gdp.diff)[1])
-
-vec_train <- cbind(gdp.elec.train[,1], pop.elec.train[,1], dummy.country)
-for (j in 2:15){
-    v <- cbind(gdp.elec.train[,j], pop.elec.train[,j], dummy.country)
-    vec_train <- rbind(vec_train,v)
-}
-vec_train <- data.frame(vec_train)
-colnames(vec_train) <- c("gdp","pop","country")
-
-
-vec_test <- cbind(gdp.elec.pred[,1], pop.elec.pred[,1], dummy.country)
-for (j in 2:11){
-    v <- cbind(gdp.elec.pred[,j], pop.elec.pred[,j], dummy.country)
-    vec_test <- rbind(vec_test,v)
-}
-vec_test <- data.frame(vec_test)
-colnames(vec_test) <- c("gdp","pop","country")
-
-
-vec_solar <- gather(use_solar_elec.diff.c,year,y)[,-1]
-vec_hydro <- gather(use_hydro_elec.diff.c,year,y)[,-1]
-vec_wind <- gather(use_wind_elec.diff.c,year,y)[,-1]
-#vec_train$country=factor(vec_train$country)
+use_solar_elec.diff.total=t(data.frame(colSums(use_solar_elec.diff.s)))
+use_wind_elec.diff.total=t(data.frame(colSums(use_wind_elec.diff.s)))
+use_hydro_elec.diff.total=t(data.frame(colSums(use_hydro_elec.diff.s)))
 
 ```
 
 
 ```{r}
-#vectors for EU total data
-vec_train = cbind(gdp.elec.train, pop.elec.train)
+#using EU yearly variations
+gdp.elec.diff.train <- gdp.diff.total[,as.character(seq(2005,2019))]
+pop.elec.diff.train <- pop.diff.total[,as.character(seq(2005,2019))]
+
+gdp.elec.diff.pred  <- gdp.diff.total[,as.character(seq(2020,2030))]
+pop.elec.diff.pred  <- pop.diff.total[,as.character(seq(2020,2030))]
+```
+
+```{r}
+gdp.elec.diff.train.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.train)), 2005, 2019, interval=12)
+pop.elec.diff.train.s <- smoothing_procedure(t(data.frame(pop.elec.diff.train)), 2005, 2019, interval=12)
+
+gdp.elec.diff.pred.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.pred)), 2020, 2030, interval=12)
+pop.elec.diff.pred.s <- smoothing_procedure(t(data.frame(pop.elec.diff.pred)), 2020, 2030, interval=12)
+
+```
+
+
+```{r}
+#vectors for EU yearly variations
+vec_train = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
 vec_train=data.frame(vec_train)
 colnames(vec_train)=c("gdp","pop")
 
-vec_test = cbind(gdp.elec.pred, pop.elec.pred)
+vec_test = cbind(as.numeric(gdp.elec.diff.pred.s), as.numeric(pop.elec.diff.pred.s))
 vec_test=data.frame(vec_test)
 colnames(vec_test)=c("gdp","pop")
 
 vec_train
 ```
+
+
+
+```{r}
+tr_data=data.frame(t(use_wind_elec.diff.total),vec_train)
+colnames(tr_data)[1]="European_Union"
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's quit population
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's try quitting the smooth terms, one at a time
+```{r}
+model_gam=gam(European_Union ~ gdp + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~  s(gdp,bs='cr') + pop + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp, bs='cr') + s(pop,bs='cr') + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ gdp + s(pop, bs='cr') + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp, bs='cr') + pop + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ gdp + pop + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+We stick with this last model that considers linear contribution from gdp, population and their interaction
+
+
+```{r}
+Pacf(model_gam$residuals)
+```
+
+```{r}
+tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+Pacf(model_gam$residuals)
+```
+
+```{r}
+tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+Pacf(model_gam$residuals)
+```
+
+
 
 Creation of models for train and for predictions, according to:
 https://fromthebottomoftheheap.net/2021/02/02/random-effects-in-gams/
@@ -1026,7 +1268,7 @@ predict_gam <- function(obj, new_x){
 train_gam <- function(x,y,out=NULL){ #total version
     colnames(x)=c("gdp", "pop")
     train_data=data.frame(y,x)
-    model_gam=gam(y ~ s(gdp) + s(pop), data=train_data)
+    model_gam=gam(y ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'), data=train_data)
 }
 
 
@@ -1041,7 +1283,7 @@ predict_gam <- function(obj, new_x){
 #Eu total predictions
 c_preds.wind.total <- conformal.pred(
     as.matrix(vec_train), 
-    use_wind_elec.total,
+    use_wind_elec.total.s,
     as.matrix(vec_test),
     alpha=0.05, 
     verbose=T, 
@@ -1128,6 +1370,7 @@ matplot(colnames(prod.by.fuel.comb.p),t(prod.by.fuel.comb.p[4:38,]),type='l',xla
 
 
 ```{r}
+prod.by.fuel.renew.countries=prod.by.fuel.renew[-c(1,2,3),]
 matplot(colnames(prod.by.fuel.renew.countries),t(prod.by.fuel.renew.countries),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables")
 ```
 
@@ -1307,7 +1550,7 @@ Natural cubic splines seems the best approach, it better captures all the local 
 Set a region-based analysis of electricity capacity
 
 ```{r}
-prod.by.fuel.renew.countries=prod.by.fuel.renew[-c(1,2,3),]
+
 countries=rownames(prod.by.fuel.renew.countries)# TODO: recompute this dataset, it's the sum of the capacities coming from different sources in prod.by.fuel dataset (discard combustible fuels and nuclear)
 
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
@@ -1515,9 +1758,9 @@ colnames(consump.oil.petr.diff.s) <- consump.oil.petr.diff[1,]
 colnames(consump.fossils.diff.s) <- consump.fossils.diff[1,]
 colnames(consump.gas.diff.s) <- consump.gas.diff[1,]
 
-consump.oil.petr.diff.s <- smoothing_procedure(consump.oil.petr.diff.s, 1991, 2019, row_names = rownames(consump.oil.petr.diff.s))
-consump.gas.diff.s <- smoothing_procedure(consump.gas.diff.s, 1991, 2019, row_names = rownames(consump.gas.diff.s))
-consump.fossils.diff.s <- smoothing_procedure(consump.fossils.diff.s, 1991, 2019, row_names = rownames(consump.fossils.diff.s))
+consump.oil.petr.diff.s <- smoothing_procedure(consump.oil.petr.diff.s, 1991, 2019,interval=1, row_names = rownames(consump.oil.petr.diff.s))
+consump.gas.diff.s <- smoothing_procedure(consump.gas.diff.s, 1991, 2019,interval=1, row_names = rownames(consump.gas.diff.s))
+consump.fossils.diff.s <- smoothing_procedure(consump.fossils.diff.s, 1991, 2019, interval=1,row_names = rownames(consump.fossils.diff.s))
 
 # We discard the countries which are not going to be used, as well as the EU totals 
 consump.oil.petr.diff.total <- consump.oil.petr.diff[3,]
