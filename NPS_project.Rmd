@@ -1953,6 +1953,39 @@ lines(seq(2005,2019,0.5),c_preds.solar.total$fit, lwd =1, col =" green",lty =1)
 
 
 ```
+```{r}
+wind.predictions=use_wind_elec.total[,16]+cumsum(c_preds.wind.total$pred)
+wind.predictions.up=use_wind_elec.total[,16]+cumsum(c_preds.wind.total$up)
+wind.predictions.low=use_wind_elec.total[,16]+cumsum(c_preds.wind.total$lo)
+
+plot(seq(2004,2019),use_wind_elec.total,xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(min(use_wind_elec.total-1000),max(wind.predictions.up+1000)))
+points(seq(2020,2030,0.5),wind.predictions,col="green",cex=0.5)
+lines(seq(2020,2030,0.5),wind.predictions.up,col="blue",lwd=1,lty=3)
+lines(seq(2020,2030,0.5),wind.predictions.low,col="blue",lwd=1,lty=3)
+
+```
+
+```{r}
+hydro.predictions=use_hydro_elec.total[,16]+cumsum(c_preds.hydro.total$pred)
+hydro.predictions.up=use_hydro_elec.total[,16]+cumsum(c_preds.hydro.total$up)
+hydro.predictions.low=use_hydro_elec.total[,16]+cumsum(c_preds.hydro.total$lo)
+
+plot(seq(2004,2019),use_hydro_elec.total,xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use',ylim=c(min(hydro.predictions.low-1000),max(hydro.predictions.up+1000)))
+points(seq(2020,2030,0.5),hydro.predictions,col="green",cex=0.5)
+lines(seq(2020,2030,0.5),hydro.predictions.up,col="blue",lwd=1,lty=3)
+lines(seq(2020,2030,0.5),hydro.predictions.low,col="blue",lwd=1,lty=3)
+
+```
+```{r}
+solar.predictions=use_solar_elec.total[,16]+cumsum(c_preds.solar.total$pred)
+solar.predictions.up=use_solar_elec.total[,16]+cumsum(c_preds.solar.total$up)
+solar.predictions.low=use_solar_elec.total[,16]+cumsum(c_preds.solar.total$lo)
+
+plot(seq(2004,2019),use_solar_elec.total,xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Solar Electricity Use',ylim=c(min(solar.predictions.low-1000),max(solar.predictions.up+1000)))
+points(seq(2020,2030,0.5),solar.predictions,col="green",cex=0.5)
+lines(seq(2020,2030,0.5),solar.predictions.up,col="blue",lwd=1,lty=3)
+lines(seq(2020,2030,0.5),solar.predictions.low,col="blue",lwd=1,lty=3)
+```
 
 
 ## Third Target: Analyse the current European renewable energy network.
@@ -2289,54 +2322,6 @@ detach(aov_ratio_cap)
 ```
 Still no statistical evidence of different development in different regions
 
-
-Let's find a 95% confidence interval for the median of electricity capacity from renewables of 2019
-```{r}
-median(aov_no_nuclear$cap_19)
-```
-
-```{r}
-uni_t_perm=function(data,mu0,B=1000){
-
-data_trans=data-mu0
-T0=abs(median(data_trans))
-T_perm=numeric(B)
-n=length(data)
-
-for(perm in 1:B){
-  
-  refl <- rbinom(n, 1, 0.5)*2 - 1
-  T_perm[perm]=abs(median(data_trans*refl))
-
-}
-return(sum(T_perm>=T0)/B)
-}
-```
-
-```{r}
-grid=seq(3000,7400,by=0.5)
-length(grid)
-library(pbapply)
-library(parallel)
-```
-
-```{r}
-cores=detectCores()
-cl=makeCluster(cores)
-clusterExport(cl,varlist=list("data","uni_t_perm"))
-```
-
-```{r}
-data=as.numeric(aov_no_nuclear$cap_19)
-perm_wrapper=function(grid_point){uni_t_perm(data,grid_point,B=2000)}
-pval_function=pbsapply(grid,perm_wrapper,cl=cl)
-```
-
-```{r}
-plot(grid,pval_function,type='l')
-range(grid[pval_function>0.05])
-```
-
 # Core: Model to predict future european CO2 emissions
 We have set ourselves the goal of predicting whether the Green Deal target of a 55% cut in greenhouse gases (CO2) emissions by 2030 with respect to 1990 levels is feasible.
 
@@ -2516,22 +2501,10 @@ qqnorm(consump.gas.gam$residuals)
 shapiro.test(consump.gas.gam$residuals)
 
 ```
-Let's start quitting gdp
+Let's start quitting the interaction
 
 ```{r}
-consump.gas.gam <- gam(gas_eu ~ s(pop_eu,bs='cr') + s(I(gdp_eu*pop_eu),bs='cr'),
-                           data = vec_gas) 
-summary(consump.gas.gam)
-
-hist(consump.gas.gam$residuals)
-qqnorm(consump.gas.gam$residuals)
-shapiro.test(consump.gas.gam$residuals)
-```
-
-Discard population as well
-
-```{r}
-consump.gas.gam <- gam(gas_eu ~ s(I(gdp_eu*pop_eu),bs='cr'),
+consump.gas.gam <- gam(gas_eu ~ s(gdp_eu,bs='cr') + s(pop_eu,bs='cr'),
                            data = vec_gas) 
 summary(consump.gas.gam)
 
@@ -2855,11 +2828,20 @@ vec_re <- cbind(as.numeric(consump.renew.diff.total[1,]),vec_oil$dif_oil_eu,vec_
 vec_re <- data.frame(vec_re)
 colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
 ```
-Core ok until here!!!!
 
 We need smoothing also on oil,fossil fuels and natural gas differences, to  fit a more complex mode with interactions
+
 ```{r}
-consump.renew.gam <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr'), data=vec_re)
+rownames(vec_re)=years_90_19[2:30]
+vec_re.temp=t(vec_re)
+vec_re.s=smoothing_procedure(vec_re.temp,1991,2019,interval=3)
+rownames(vec_re.s)=rownames(vec_re.temp)
+vec_re.s=data.frame(t(vec_re.s))
+```
+
+
+```{r}
+consump.renew.gam <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.s)
 
 summary(consump.renew.gam)
 
@@ -2867,12 +2849,51 @@ hist(consump.renew.gam$residuals)
 qqnorm(consump.renew.gam$residuals)
 shapiro.test(consump.renew.gam$residuals)
 ```
+Quit fossil fuels and fossil fuels-natural gas interaction
+```{r}
+consump.renew.gam <- gam(value_re ~ s(value_oil,bs='cr') +  s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_oil*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.s)
+
+summary(consump.renew.gam)
+
+hist(consump.renew.gam$residuals)
+qqnorm(consump.renew.gam$residuals)
+shapiro.test(consump.renew.gam$residuals)
+```
+Quit oil-fossil fuel interaction as well
+
+```{r}
+consump.renew.gam <- gam(value_re ~ s(value_oil,bs='cr') +  s(value_ng,bs='cr') + s(I(value_oil*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.s)
+
+summary(consump.renew.gam)
+
+hist(consump.renew.gam$residuals)
+qqnorm(consump.renew.gam$residuals)
+shapiro.test(consump.renew.gam$residuals)
+```
+
+
 ```{r}
 Pacf(consump.renew.gam$residuals)
 ```
 
 ```{r}
-vec_re_pred <- cbind(consump.oil.petr.gam.preds$fit,consump.fossils.gam.preds$fit, consump.gas.gam.preds$fit)
+oil.preds.s=data.frame(t(consump.oil.petr.gam.preds$fit))
+colnames(oil.preds.s)=seq(2020,2030)
+oil.preds.s=smoothing_procedure(oil.preds.s,2020,2030,interval=3)
+
+ff.preds.s=data.frame(t(consump.fossils.gam.preds$fit))
+colnames(ff.preds.s)=seq(2020,2030)
+ff.preds.s=smoothing_procedure(ff.preds.s,2020,2030,interval=3)
+
+gas.preds.s=data.frame(t(consump.gas.gam.preds$fit))
+colnames(gas.preds.s)=seq(2020,2030)
+gas.preds.s=smoothing_procedure(gas.preds.s,2020,2030,interval=3)
+```
+
+
+
+```{r}
+vec_re_pred <- t(rbind(oil.preds.s,ff.preds.s, gas.preds.s))
 vec_re_pred <- data.frame(vec_re_pred)
 colnames(vec_re_pred) <- c("value_oil", "value_ff", "value_ng")
 
@@ -2882,9 +2903,16 @@ consump.renew.gam.preds <- predict(consump.renew.gam, newdata=vec_re_pred, se=T)
 
 ```{r}
 # See graphs
-with(vec_re, plot(seq(1990,2019) ,value_re ,xlim=c(1990,2030),ylim=c(2e+6,7e+6),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Renewable Energy Consumption.'))
-points(seq(2020,2030), consump.renew.gam.preds$fit ,lwd =2, col ="red")
+with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Renewable Energy Consumption'))
+points(seq(2020,2030,1/3), consump.renew.gam.preds$fit ,cex=1, col ="red")
+lines(seq(1991,2019,1/3),consump.renew.gam$fitted.values,col="blue",lwd=1)
 ```
+```{r}
+renew.predictions=data.frame(t(consump.renew.gam.preds$fit))
+colnames(renew.predictions)=seq(2020,2030,1/3)
+renew.predictions=renew.predictions[1,as.character(seq(2020,2030))]
+```
+
 
 
 ## DIFF_TOTAL_CO2 ~  DIFF_TOTAL_RENEWABLE CONSUMPTION
@@ -2933,21 +2961,30 @@ colnames(vec_c02) <- c("value_c02", "value_re")
 colnames(vec_c02_pred) <- c("value_re")
 
 ```
+Core ok until here!!!
 
 
 ```{r}
-vec_c02= cbind(Co2$ValueCo2,vec_re$value_re)
+vec_c02= cbind(Co2$ValueCo2,vec_re$value_re,vec_oil$dif_gdp_eu,vec_oil$dif_pop_eu)
 vec_c02 <- data.frame(vec_c02)
-vec_c02_pred <- data.frame(consump.renew.gam.preds$fit)
+vec_c02_pred <- data.frame(t(renew.predictions),vec_oil_pred$dif_gdp_eu,vec_oil_pred$dif_pop_eu)
 
-colnames(vec_c02) <- c("value_c02", "value_re")
-colnames(vec_c02_pred) <- c("value_re")
+colnames(vec_c02) <- c("value_c02", "value_re","value_gdp","value_pop")
+colnames(vec_c02_pred) <- c("value_re","value_gdp","value_pop")
 
+```
+```{r}
+rownames(vec_c02)=years_90_19[2:30]
+vec_c02.temp=t(vec_c02)
+vec_c02.s=smoothing_procedure(vec_c02.temp,1991,2019,interval=2)
+rownames(vec_c02.s)=rownames(vec_c02.temp)
+vec_c02.s=data.frame(t(vec_c02.s))
+View(vec_c02.s)
 ```
 
 
 ```{r}
-c02.gam <- gam(value_c02 ~ s(value_re), data=vec_c02)
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr') + s(value_gdp,bs='cr') + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr') + s(I(value_gdp*value_pop),bs='cr') + s(I(value_re*value_pop),bs='cr') + s(I(value_re*value_gdp*value_pop),bs='cr'), data=vec_c02)
 
 summary(c02.gam)
 
