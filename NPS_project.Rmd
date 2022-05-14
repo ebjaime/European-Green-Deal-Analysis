@@ -981,6 +981,7 @@ We first tried to construct models using original data and checked the correlati
 Let's find the adequate model to use for conformal prediction
 ```{r}
 tr_data=data.frame(t(use_wind_elec.total.s),vec_train)
+colnames(tr_data)[1]="European_Union"
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1004,6 +1005,19 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+Let's quit the interaction
+
+```{r}
+tr_data=data.frame(t(use_solar_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
 
 ```{r}
 Pacf(model_gam$residuals)
@@ -1019,6 +1033,31 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+Let's quit the interaction
+
+```{r}
+tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+We should quit population as well
+
+```{r}
+tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
+model_gam=gam(European_Union ~ s(gdp,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
 
 ```{r}
 Pacf(model_gam$residuals)
@@ -1063,9 +1102,9 @@ use_hydro_elec.diff.c <- use_hydro_elec.diff.c[rn,]
 
 Smoothing for solar, wind and hydro to obtain data for each month (variations)
 ```{r}
-use_solar_elec.diff.s <- smoothing_procedure(use_solar_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_solar_elec.diff.c))
-use_wind_elec.diff.s <- smoothing_procedure(use_wind_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_wind_elec.diff.c))
-use_hydro_elec.diff.s <- smoothing_procedure(use_hydro_elec.diff.c, 2005, 2019, interval=12, row_names = rownames(use_hydro_elec.diff.c))
+use_solar_elec.diff.s <- smoothing_procedure(use_solar_elec.diff.c, 2005, 2019, interval=2, row_names = rownames(use_solar_elec.diff.c))
+use_wind_elec.diff.s <- smoothing_procedure(use_wind_elec.diff.c, 2005, 2019, interval=2, row_names = rownames(use_wind_elec.diff.c))
+use_hydro_elec.diff.s <- smoothing_procedure(use_hydro_elec.diff.c, 2005, 2019, interval=2, row_names = rownames(use_hydro_elec.diff.c))
 ```
 
 ```{r}
@@ -1090,11 +1129,11 @@ pop.elec.diff.pred  <- pop.diff.total[,as.character(seq(2020,2030))]
 ```
 
 ```{r}
-gdp.elec.diff.train.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.train)), 2005, 2019, interval=12)
-pop.elec.diff.train.s <- smoothing_procedure(t(data.frame(pop.elec.diff.train)), 2005, 2019, interval=12)
+gdp.elec.diff.train.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.train)), 2005, 2019, interval=2)
+pop.elec.diff.train.s <- smoothing_procedure(t(data.frame(pop.elec.diff.train)), 2005, 2019, interval=2)
 
-gdp.elec.diff.pred.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.pred)), 2020, 2030, interval=12)
-pop.elec.diff.pred.s <- smoothing_procedure(t(data.frame(pop.elec.diff.pred)), 2020, 2030, interval=12)
+gdp.elec.diff.pred.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.pred)), 2020, 2030, interval=2)
+pop.elec.diff.pred.s <- smoothing_procedure(t(data.frame(pop.elec.diff.pred)), 2020, 2030, interval=2)
 
 ```
 
@@ -1125,7 +1164,7 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-Let's quit population
+Let's try quitting one covariate at a time. We start quitting population
 ```{r}
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
@@ -1135,8 +1174,10 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+Let's put back population and quit gdp
+
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr'),data=tr_data)
+model_gam=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
 
@@ -1144,6 +1185,19 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+Let's put back gdp and quit the interaction term
+
+
+```{r}
+model_gam=gam(European_Union ~ s(pop,bs='cr') + s(gdp,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
 Let's try quitting the smooth terms, one at a time
 ```{r}
 model_gam=gam(European_Union ~ gdp + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
@@ -1185,6 +1239,17 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+Let's try quitting population term
+
+```{r}
+model_gam=gam(European_Union ~ gdp + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
 
 ```{r}
 model_gam=gam(European_Union ~ s(gdp, bs='cr') + pop + gdp:pop,data=tr_data)
@@ -1205,16 +1270,89 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-We stick with this last model that considers linear contribution from gdp, population and their interaction
-
+Let's try quitting gdp term
 
 ```{r}
-Pacf(model_gam$residuals)
+model_gam_wind=gam(European_Union ~ pop + gdp:pop,data=tr_data)
+
+summary(model_gam_wind)
+
+hist(model_gam_wind$residuals)
+qqnorm(model_gam_wind$residuals)
+shapiro.test(model_gam_wind$residuals)
 ```
+We stick with this last model that considers linear contribution from population and their interaction
+
 
 ```{r}
-tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
+Pacf(model_gam_wind$residuals)
+```
+Unfortunately there is again a bit of correlation at 1 step but this could be due to the smoothing that we had to apply in order to construct the models (as mentioned before). Anyway it is clearly better than the corresponding best model constructed with original data.
+
+Let's go on constructing hydro model
+
+```{r}
+tr_data=data.frame(t(use_hydro_elec.diff.total),vec_train)
+colnames(tr_data)[1]="European_Union"
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's try quitting one covariate at a time
+
+```{r}
+model_gam=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') ,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's try quitting the smooth terms, one at a time
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + gdp:pop ,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+```{r}
+model_gam=gam(European_Union ~ pop + s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+```{r}
+model_gam=gam(European_Union ~ s(pop,bs='cr')+ gdp + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
 
@@ -1224,12 +1362,7 @@ shapiro.test(model_gam$residuals)
 ```
 
 ```{r}
-Pacf(model_gam$residuals)
-```
-
-```{r}
-tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam=gam(European_Union ~ pop + gdp + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
 
@@ -1239,40 +1372,453 @@ shapiro.test(model_gam$residuals)
 ```
 
 ```{r}
-Pacf(model_gam$residuals)
+model_gam=gam(European_Union ~ s(pop,bs='cr') + gdp + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~  gdp + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
 ```
 
 
+```{r}
+model_gam=gam(European_Union ~ pop + gdp + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ pop + pop:gdp,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+```{r}
+model_gam=gam(European_Union ~ pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's try to explain the differences of hydro usage with original data of EU gdp and population
+
+```{r}
+#vectors for EU total data
+vec_train = cbind(as.numeric(gdp.elec.train.s[,3:31]), as.numeric(pop.elec.train.s[,3:31]))
+vec_train=data.frame(vec_train)
+colnames(vec_train)=c("gdp","pop")
+
+vec_test = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
+vec_test=data.frame(vec_test)
+colnames(vec_test)=c("gdp","pop")
+
+vec_train
+```
+```{r}
+tr_data=data.frame(t(use_hydro_elec.diff.total),vec_train)
+colnames(tr_data)[1]="European_Union"
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's quit the interaction
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's quit gdp as well
+```{r}
+model_gam=gam(European_Union ~ s(pop,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's quit smooth terms one at a time
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's quit gdp
+```{r}
+model_gam=gam(European_Union ~ s(pop,bs='cr') + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ gdp + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's quit the interaction term
+```{r}
+model_gam=gam(European_Union ~ gdp+ s(pop,bs='cr') ,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's quit gdp
+```{r}
+model_gam=gam(European_Union ~ pop + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's quit the interaction
+```{r}
+model_gam=gam(European_Union ~ pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's continue to search for a more complete model
+```{r}
+model_gam=gam(European_Union ~ gdp+ pop+ s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Let's quit population
+
+```{r}
+model_gam=gam(European_Union ~ gdp+  s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Quit the interaction
+```{r}
+model_gam=gam(European_Union ~ gdp,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Quit gdp
+```{r}
+model_gam=gam(European_Union ~ pop + gdp:pop ,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Better...
+
+
+```{r}
+Pacf(model_gam$residuals)
+```
+
+```{r}
+model_gam_hydro=model_gam
+```
+
+```{r}
+#vectors for EU yearly variations
+vec_train = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
+vec_train=data.frame(vec_train)
+colnames(vec_train)=c("gdp","pop")
+
+vec_test = cbind(as.numeric(gdp.elec.diff.pred.s), as.numeric(pop.elec.diff.pred.s))
+vec_test=data.frame(vec_test)
+colnames(vec_test)=c("gdp","pop")
+
+vec_train
+```
+
+```{r}
+tr_data=data.frame(t(use_solar_elec.diff.total),vec_train)
+colnames(tr_data)[1]="European_Union"
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Quit one at a time
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+Quit smooth terms, one at a time
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ gdp + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ gdp + pop +  s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+```{r}
+model_gam=gam(European_Union ~ gdp+ s(pop,bs='cr') + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's quit population
+
+```{r}
+model_gam=gam(European_Union ~ gdp + gdp:pop,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Quit the interaction
+
+```{r}
+model_gam=gam(European_Union ~ gdp,data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+Let's move again to original data of gdp and population to construct this model
+```{r}
+#vectors for EU total data
+vec_train = cbind(as.numeric(gdp.elec.train.s[,3:31]), as.numeric(pop.elec.train.s[,3:31]))
+vec_train=data.frame(vec_train)
+colnames(vec_train)=c("gdp","pop")
+
+vec_test = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
+vec_test=data.frame(vec_test)
+colnames(vec_test)=c("gdp","pop")
+
+vec_train
+```
+
+```{r}
+tr_data=data.frame(t(use_solar_elec.diff.total),vec_train)
+colnames(tr_data)[1]="European_Union"
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+
+summary(model_gam)
+
+hist(model_gam$residuals)
+qqnorm(model_gam$residuals)
+shapiro.test(model_gam$residuals)
+```
+
+
+```{r}
+Pacf(model_gam$residuals)
+```
+Some high residuals but we stick with this model
+```{r}
+model_gam_solar=model_gam
+```
+
+Little review of the selected models
+```{r}
+summary(model_gam_wind)
+
+```
+
+```{r}
+summary(model_gam_hydro)
+
+```
+
+```{r}
+summary(model_gam_solar)
+
+```
+
+
+
+### Predictions
 
 Creation of models for train and for predictions, according to:
 https://fromthebottomoftheheap.net/2021/02/02/random-effects-in-gams/
 
 ```{r}
-#ignore it for now
-train_gam <- function(x,y,out=NULL){
-    colnames(x)=c("gdp", "pop", "country")
-    train_data=data.frame(y,x)
-    model_gam=gam(y ~ s(country,gdp,bs='re') + s(country,pop,bs='re'), data=train_data)
-}
-
-
-predict_gam <- function(obj, new_x){
-    new_x=data.frame(new_x)
-    colnames(new_x)=c("gdp", "pop", "country")
-    predict.gam(obj,new_x)
-}
-
-```
-
-```{r}
-train_gam <- function(x,y,out=NULL){ #total version
+train_gam_wind <- function(x,y,out=NULL){
     colnames(x)=c("gdp", "pop")
     train_data=data.frame(y,x)
-    model_gam=gam(y ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'), data=train_data)
+    model_gam=gam(y ~ pop + gdp:pop, data=train_data)
 }
 
 
-predict_gam <- function(obj, new_x){
+predict_gam_wind <- function(obj, new_x){
     new_x=data.frame(new_x)
     colnames(new_x)=c("gdp", "pop")
     predict.gam(obj,new_x)
@@ -1280,15 +1826,94 @@ predict_gam <- function(obj, new_x){
 ```
 
 ```{r}
+vec_train_wind = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
+vec_train_wind=data.frame(vec_train_wind)
+colnames(vec_train_wind)=c("gdp","pop")
+
+vec_test_wind = cbind(as.numeric(gdp.elec.diff.pred.s), as.numeric(pop.elec.diff.pred.s))
+vec_test_wind=data.frame(vec_test_wind)
+colnames(vec_test_wind)=c("gdp","pop")
+```
+
+```{r}
+train_gam_hydro <- function(x,y,out=NULL){
+    colnames(x)=c("gdp", "pop")
+    train_data=data.frame(y,x)
+    model_gam=gam(y ~ pop + gdp:pop, data=train_data)
+}
+
+
+predict_gam_hydro <- function(obj, new_x){
+    new_x=data.frame(new_x)
+    colnames(new_x)=c("gdp", "pop")
+    predict.gam(obj,new_x)
+}
+```
+
+```{r}
+vec_train_hydro = cbind(as.numeric(gdp.elec.train.s[,3:31]), as.numeric(pop.elec.train.s[,3:31]))
+vec_train_hydro=data.frame(vec_train_hydro)
+colnames(vec_train_hydro)=c("gdp","pop")
+
+vec_test_hydro = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
+vec_test_hydro=data.frame(vec_test_hydro)
+colnames(vec_test_hydro)=c("gdp","pop")
+```
+
+```{r}
+train_gam_solar <- function(x,y,out=NULL){
+    colnames(x)=c("gdp", "pop")
+    train_data=data.frame(y,x)
+    model_gam=gam(y ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'), data=train_data)
+}
+
+
+predict_gam_solar <- function(obj, new_x){
+    new_x=data.frame(new_x)
+    colnames(new_x)=c("gdp", "pop")
+    predict.gam(obj,new_x)
+}
+```
+
+```{r}
+vec_train_solar = cbind(as.numeric(gdp.elec.train.s[,3:31]), as.numeric(pop.elec.train.s[,3:31]))
+vec_train_solar=data.frame(vec_train_solar)
+colnames(vec_train_solar)=c("gdp","pop")
+
+vec_test_solar = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
+vec_test_solar=data.frame(vec_test_solar)
+colnames(vec_test_solar)=c("gdp","pop")
+```
+
+
+```{r}
 #Eu total predictions
 c_preds.wind.total <- conformal.pred(
-    as.matrix(vec_train), 
-    use_wind_elec.total.s,
-    as.matrix(vec_test),
+    as.matrix(vec_train_wind), 
+    use_wind_elec.diff.total,
+    as.matrix(vec_test_wind),
     alpha=0.05, 
     verbose=T, 
-    train.fun = train_gam, 
-    predict.fun = predict_gam)
+    train.fun = train_gam_wind, 
+    predict.fun = predict_gam_wind)
+
+c_preds.solar.total <- conformal.pred(
+    as.matrix(vec_train_solar), 
+    use_solar_elec.diff.total,
+    as.matrix(vec_test_solar),
+    alpha=0.05, 
+    verbose=T, 
+    train.fun = train_gam_solar, 
+    predict.fun = predict_gam_solar)
+
+c_preds.hydro.total <- conformal.pred(
+    as.matrix(vec_train_hydro), 
+    use_hydro_elec.diff.total,
+    as.matrix(vec_test_hydro),
+    alpha=0.05, 
+    verbose=T, 
+    train.fun = train_gam_hydro, 
+    predict.fun = predict_gam_hydro)
 
 #Error in gam(y ~ s(gdp) + s(pop), data = train_data) : Model has more coefficients than data
 
@@ -1296,62 +1921,37 @@ c_preds.wind.total <- conformal.pred(
 #Using all the countries brings to ugly plots in conformal predictions, so we worked with total EU values
 ```
 
-
-```{r}
-c_preds.wind <- conformal.pred(
-    as.matrix(vec_train), 
-    vec_wind,
-    as.matrix(vec_test),
-    alpha=0.05, 
-    verbose=T, 
-    train.fun = train_gam, 
-    predict.fun = predict_gam)
-
-#c_preds.solar <- conformal.pred(
-    #as.matrix(vec_train), 
-    #vec_solar,
-    #as.matrix(vec_test),
-    #alpha=0.05, 
-    #verbose=T, 
-    #train.fun = train_gam, 
-    #predict.fun = predict_gam)
-
-#c_preds.hydro <- conformal.pred(
-    #as.matrix(vec_train), 
-    #vec_hydro,
-    #as.matrix(vec_test),
-    #alpha=0.05, 
-    #verbose=T, 
-    #train.fun = train_gam, 
-    #predict.fun = predict_gam)
-```
-
 Plot predictions 2020-2030:
+
 ```{r}
-with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use'))
+plot(seq(2005,2019,0.5), use_wind_elec.diff.total, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(9000,60000))
 
-lines(rep(seq(2020,2030),34),c_preds.wind$pred,lwd =2, col ="green",lty=3)
-matlines(rep(seq(2020,2030),34),c_preds.wind$up,lwd =1, col =" blue",lty =3)
-matlines(rep(seq(2020,2030),34),c_preds.wind$lo, lwd =1, col =" blue",lty =3)
+lines(seq(2020,2030,0.5),c_preds.wind.total$pred,lwd =2, col ="green",lty=3)
+lines(seq(2020,2030,0.5),c_preds.wind.total$up,lwd =1, col =" blue",lty =3)
+lines(seq(2020,2030,0.5),c_preds.wind.total$lo, lwd =1, col =" blue",lty =3)
 
-#ugly plot
 ```
 
 ```{r}
-with(data.frame(vec_wind=vec_wind, year=seq(2005,2019)), plot(year, vec_wind, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(-2000,15000)))
+plot(seq(2005,2019,0.5), use_hydro_elec.diff.total, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use',ylim=c(-10000,10000))
 
-lines(rep(seq(2020,2030),34),c_preds.wind$pred,lwd =2, col ="green",lty=3)
-matlines(rep(seq(2020,2030),34),c_preds.wind$up,lwd =1, col =" blue",lty =3)
-matlines(rep(seq(2020,2030),34),c_preds.wind$lo, lwd =1, col =" blue",lty =3)
+lines(seq(2020,2030,0.5),c_preds.hydro.total$pred,lwd =2, col ="green",lty=3)
+lines(seq(2020,2030,0.5),c_preds.hydro.total$up,lwd =1, col =" blue",lty =3)
+lines(seq(2020,2030,0.5),c_preds.hydro.total$lo, lwd =1, col =" blue",lty =3)
+lines(seq(2005,2019,0.5),c_preds.hydro.total$fit, lwd =1, col =" green",lty =1)
+
+
 ```
 
-
 ```{r}
-with(data.frame(vec_hydro=vec_hydro, year=seq(2005,2019)), plot(year, vec_hydro, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use'))
+plot(seq(2005,2019,0.5), use_solar_elec.diff.total, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Solar Electricity Use',ylim=c(-100000,40000))
 
-lines(rep(seq(2020,2030),34),c_preds.hydro$pred,lwd =2, col ="green",lty=3)
-matlines(rep(seq(2020,2030),34),c_preds.hydro$up,lwd =1, col =" blue",lty =3)
-matlines(rep(seq(2020,2030),34),c_preds.hydro$lo, lwd =1, col =" blue",lty =3)
+lines(seq(2020,2030,0.5),c_preds.solar.total$pred,lwd =2, col ="green",lty=3)
+lines(seq(2020,2030,0.5),c_preds.solar.total$up,lwd =1, col =" blue",lty =3)
+lines(seq(2020,2030,0.5),c_preds.solar.total$lo, lwd =1, col =" blue",lty =3)
+lines(seq(2005,2019,0.5),c_preds.solar.total$fit, lwd =1, col =" green",lty =1)
+
+
 ```
 
 
