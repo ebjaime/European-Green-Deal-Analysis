@@ -2927,45 +2927,37 @@ sum(!( rownames(gdp) %in% unique(c02$Country))) > 0
 Import EU dataframe
 ```{r}
 Co2=read.xlsx("data/owid-co2-data.xlsx",sheet=2,colNames=F)
-colnames(Co2)=c("European Union","Year","ValueCo2")
+Co2=data.frame(Co2[,3])
+rownames(Co2)=years_90_19
+colnames(Co2)="ValueCo2"
 head(Co2)
 ```
 
 ```{r}
-plot(Co2$Year,Co2$ValueCo2)
+Co2=read.xlsx("data/ghg_emissions.xlsx",sheet=3,colNames=F)
+Co2=data.frame(t(Co2))
+rownames(Co2)=years_90_19
+colnames(Co2)="ValueCo2"
+head(Co2)
+
 ```
 
-
-Calculate differences:
-```{r}
-#ignore for now
-c02.diff <- data.frame()
-for(i in 1:34){
-    for(j in 1:29){ # 1990-2019
-        c02.diff <- rbind(c02.diff, c(c02$Country[(j+1)+(i-1)*31], 1990+j,
-                                      c02[(j+1)+(i-1)*31, 4] - c02[j+(i-1)*31, 4]))
-    }
-}
-colnames(c02.diff) <- colnames(c02)[c(-2,-5)]
-```
 
 
 ```{r}
-#ignore for now
-vec_c02 <- rbind(c02.diff[,3], vec_re[,1]) #FIXME
-vec_c02 <- lapply(vec_c02, as.numeric)
-vec_c02 <- data.frame(vec_c02)
-vec_c02_pred <- data.frame(consump.renew.gam.preds$fit)
-
-colnames(vec_c02) <- c("value_c02", "value_re")
-colnames(vec_c02_pred) <- c("value_re")
-
+plot(years_90_19,Co2$ValueCo2)
 ```
+
+
 Core ok until here!!!
+```{r}
+Co2.diff=data.frame(Co2[-1,]-Co2[-30,])
+colnames(Co2.diff)="diff_co2"
+```
 
 
 ```{r}
-vec_c02= cbind(Co2$ValueCo2,vec_re$value_re,vec_oil$dif_gdp_eu,vec_oil$dif_pop_eu)
+vec_c02= cbind(Co2.diff$diff_co2,vec_re$value_re,vec_oil$dif_gdp_eu,vec_oil$dif_pop_eu)
 vec_c02 <- data.frame(vec_c02)
 vec_c02_pred <- data.frame(t(renew.predictions),vec_oil_pred$dif_gdp_eu,vec_oil_pred$dif_pop_eu)
 
@@ -2973,18 +2965,72 @@ colnames(vec_c02) <- c("value_c02", "value_re","value_gdp","value_pop")
 colnames(vec_c02_pred) <- c("value_re","value_gdp","value_pop")
 
 ```
+
 ```{r}
 rownames(vec_c02)=years_90_19[2:30]
 vec_c02.temp=t(vec_c02)
-vec_c02.s=smoothing_procedure(vec_c02.temp,1991,2019,interval=2)
+vec_c02.s=smoothing_procedure(vec_c02.temp,1991,2019,interval=3)
 rownames(vec_c02.s)=rownames(vec_c02.temp)
 vec_c02.s=data.frame(t(vec_c02.s))
 View(vec_c02.s)
 ```
 
+```{r}
+vec_c02_pred.temp=t(vec_c02_pred)
+vec_c02_pred.s=smoothing_procedure(vec_c02_pred.temp,2020,2030,interval=3)
+rownames(vec_c02_pred.s)=rownames(vec_c02_pred.temp)
+vec_c02_pred.s=data.frame(t(vec_c02_pred.s))
+```
+
 
 ```{r}
-c02.gam <- gam(value_c02 ~ s(value_re,bs='cr') + s(value_gdp,bs='cr') + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr') + s(I(value_gdp*value_pop),bs='cr') + s(I(value_re*value_pop),bs='cr') + s(I(value_re*value_gdp*value_pop),bs='cr'), data=vec_c02)
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr') + s(value_gdp,bs='cr') + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr') + s(I(value_gdp*value_pop),bs='cr') + s(I(value_re*value_pop),bs='cr') + s(I(value_re*value_gdp*value_pop),bs='cr'), data=vec_c02.s)
+
+summary(c02.gam)
+
+hist(c02.gam$residuals)
+qqnorm(c02.gam$residuals)
+shapiro.test(c02.gam$residuals)
+```
+
+Let's quit gdp and gdp-pop interaction
+
+```{r}
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr')  + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr')  + s(I(value_re*value_pop),bs='cr') + s(I(value_re*value_gdp*value_pop),bs='cr'), data=vec_c02.s)
+
+summary(c02.gam)
+
+hist(c02.gam$residuals)
+qqnorm(c02.gam$residuals)
+shapiro.test(c02.gam$residuals)
+```
+Let's quit the triple interaction
+```{r}
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr')  + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr')  + s(I(value_re*value_pop),bs='cr'), data=vec_c02.s)
+
+summary(c02.gam)
+
+hist(c02.gam$residuals)
+qqnorm(c02.gam$residuals)
+shapiro.test(c02.gam$residuals)
+```
+Quit renewables-pop interaction as well
+```{r}
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr')  + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr')  , data=vec_c02.s)
+
+summary(c02.gam)
+
+hist(c02.gam$residuals)
+qqnorm(c02.gam$residuals)
+shapiro.test(c02.gam$residuals)
+```
+
+
+```{r}
+Pacf(c02.gam$residuals)
+```
+```{r}
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr'), data=vec_c02)
 
 summary(c02.gam)
 
@@ -2994,15 +3040,28 @@ shapiro.test(c02.gam$residuals)
 ```
 
 ```{r}
-Pacf(c02.gam$residuals)
+c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
+
+with(vec_c02, plot(seq(1991,2019) ,value_c02 ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
+points(seq(2020,2030),c02.gam.preds$fit ,cex=0.5, col ="red")
+lines(seq(1991,2019),c02.gam$fitted.values,lwd=1,col="blue")
+```
+
+
+
+```{r}
+c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred.s, se=T)
+
+with(vec_c02.s, plot(seq(1991,2019,1/3) ,value_c02 ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
+points(seq(2020,2030,1/3),c02.gam.preds$fit ,cex=0.5, col ="red")
+lines(seq(1991,2019,1/3),c02.gam$fitted.values,lwd=1,col="blue")
 ```
 
 ```{r}
-c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
 
-with(vec_c02, plot(seq(1990,2019) ,value_c02 ,xlim=c(1990,2030),ylim=c(2500,5000),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
-points(seq(2020,2030),c02.gam.preds$fit ,lwd =2, col ="red")
 ```
+
+
 
 How much is the predicted decrease?
 ```{r}
