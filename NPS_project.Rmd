@@ -2913,6 +2913,9 @@ colnames(renew.predictions)=seq(2020,2030,1/3)
 renew.predictions=renew.predictions[1,as.character(seq(2020,2030))]
 ```
 
+```{r}
+renew.predictions.total=consump.renew.europe[,30]+cumsum(renew.predictions)
+```
 
 
 ## DIFF_TOTAL_CO2 ~  DIFF_TOTAL_RENEWABLE CONSUMPTION
@@ -2926,11 +2929,11 @@ sum(!( rownames(gdp) %in% unique(c02$Country))) > 0
 ```
 Import EU dataframe
 ```{r}
-Co2=read.xlsx("data/owid-co2-data.xlsx",sheet=2,colNames=F)
-Co2=data.frame(Co2[,3])
-rownames(Co2)=years_90_19
-colnames(Co2)="ValueCo2"
-head(Co2)
+#Co2=read.xlsx("data/owid-co2-data.xlsx",sheet=2,colNames=F)
+#Co2=data.frame(Co2[,3])
+#rownames(Co2)=years_90_19
+#colnames(Co2)="ValueCo2"
+#head(Co2)
 ```
 
 ```{r}
@@ -2955,8 +2958,13 @@ Co2.diff=data.frame(Co2[-1,]-Co2[-30,])
 colnames(Co2.diff)="diff_co2"
 ```
 
+```{r}
+plot(seq(1991,2019),Co2.diff$diff_co2)
+```
+
 
 ```{r}
+#using differences for covariates
 vec_c02= cbind(Co2.diff$diff_co2,vec_re$value_re,vec_oil$dif_gdp_eu,vec_oil$dif_pop_eu)
 vec_c02 <- data.frame(vec_c02)
 vec_c02_pred <- data.frame(t(renew.predictions),vec_oil_pred$dif_gdp_eu,vec_oil_pred$dif_pop_eu)
@@ -2965,6 +2973,19 @@ colnames(vec_c02) <- c("value_c02", "value_re","value_gdp","value_pop")
 colnames(vec_c02_pred) <- c("value_re","value_gdp","value_pop")
 
 ```
+
+```{r}
+#using original data for covariates (Greenhouse gases still in differences)
+vec_c02= cbind(Co2.diff$diff_co2,t(consump.renew.europe[,2:30]),gdp.total[2:30],pop.total[2:30])
+vec_c02 <- data.frame(vec_c02)
+vec_c02_pred <- data.frame(t(renew.predictions.total),gdp.total[31:41],pop.total[31:41])
+
+colnames(vec_c02) <- c("value_c02", "value_re","value_gdp","value_pop")
+colnames(vec_c02_pred) <- c("value_re","value_gdp","value_pop")
+
+```
+
+
 
 ```{r}
 rownames(vec_c02)=years_90_19[2:30]
@@ -3004,6 +3025,13 @@ hist(c02.gam$residuals)
 qqnorm(c02.gam$residuals)
 shapiro.test(c02.gam$residuals)
 ```
+With original data as covariates stop here
+```{r}
+Pacf(c02.gam$residuals)
+
+```
+
+
 Let's quit the triple interaction
 ```{r}
 c02.gam <- gam(value_c02 ~ s(value_re,bs='cr')  + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr')  + s(I(value_re*value_pop),bs='cr'), data=vec_c02.s)
@@ -3052,7 +3080,7 @@ lines(seq(1991,2019),c02.gam$fitted.values,lwd=1,col="blue")
 ```{r}
 c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred.s, se=T)
 
-with(vec_c02.s, plot(seq(1991,2019,1/3) ,value_c02 ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
+with(vec_c02.s, plot(seq(1991,2019,1/3) ,value_c02 ,xlim=c(1990,2030),ylim=c(-1000,20),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
 points(seq(2020,2030,1/3),c02.gam.preds$fit ,cex=0.5, col ="red")
 lines(seq(1991,2019,1/3),c02.gam$fitted.values,lwd=1,col="blue")
 ```
