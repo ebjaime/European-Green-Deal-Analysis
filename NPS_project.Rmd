@@ -978,7 +978,9 @@ vec_train
 We first tried to construct models using original data and checked the correlation of the residuals using the (partial) autocorrelation function, obtaining as we will see high correlation values.
 
 
-Let's find the adequate model to use for conformal prediction
+Let's find the adequate models to use for conformal prediction
+
+#### Wind model - original data
 ```{r}
 tr_data=data.frame(t(use_wind_elec.total.s),vec_train)
 colnames(tr_data)[1]="European_Union"
@@ -995,6 +997,7 @@ shapiro.test(model_gam$residuals)
 Pacf(model_gam$residuals)
 ```
 
+#### Solar model - original data
 ```{r}
 tr_data=data.frame(t(use_solar_elec.total.s),vec_train)
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
@@ -1023,6 +1026,8 @@ shapiro.test(model_gam$residuals)
 Pacf(model_gam$residuals)
 ```
 
+
+#### Hydro model - original data
 ```{r}
 tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
@@ -1151,7 +1156,7 @@ colnames(vec_test)=c("gdp","pop")
 vec_train
 ```
 
-
+#### Wind model - First order differences
 
 ```{r}
 tr_data=data.frame(t(use_wind_elec.diff.total),vec_train)
@@ -1288,6 +1293,9 @@ We stick with this last model that considers linear contribution from population
 Pacf(model_gam_wind$residuals)
 ```
 Unfortunately there is again a bit of correlation at 1 step but this could be due to the smoothing that we had to apply in order to construct the models (as mentioned before). Anyway it is clearly better than the corresponding best model constructed with original data.
+
+
+#### Hydro model - First order differences
 
 Let's go on constructing hydro model
 
@@ -1622,6 +1630,10 @@ Pacf(model_gam$residuals)
 model_gam_hydro=model_gam
 ```
 
+
+#### Solar model - First order differences
+
+Let's go back to yearly variation datasets
 ```{r}
 #vectors for EU yearly variations
 vec_train = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
@@ -1782,7 +1794,7 @@ shapiro.test(model_gam$residuals)
 ```{r}
 Pacf(model_gam$residuals)
 ```
-Some high residuals but we stick with this model
+Some high correlations in residuals but we stick with this model
 ```{r}
 model_gam_solar=model_gam
 ```
@@ -2322,10 +2334,10 @@ detach(aov_ratio_cap)
 ```
 Still no statistical evidence of different development in different regions
 
-# Core: Model to predict future european CO2 emissions
-We have set ourselves the goal of predicting whether the Green Deal target of a 55% cut in greenhouse gases (CO2) emissions by 2030 with respect to 1990 levels is feasible.
+# Core: Model to predict future european GHG emissions
+We have set ourselves the goal of predicting whether the Green Deal target of a 55% cut in greenhouse gases emissions by 2030 with respect to 1990 levels is feasible.
 
-With the target to develop a model to predict future CO2 emissions as a function of the other energy indicators we had to previously construct a variety of auxiliar models to predict covariates values to be used in the final model.
+With the target to develop a model to predict future Greenhouse gases emissions as a function of the other energy indicators we had to previously construct a variety of auxiliar models to predict covariates values to be used in the final model.
 
 
 Keeping only European countries for which we have complete data of Gdp, Population and Energy consumptions.
@@ -2918,7 +2930,7 @@ renew.predictions.total=consump.renew.europe[,30]+cumsum(renew.predictions)
 ```
 
 
-## DIFF_TOTAL_CO2 ~  DIFF_TOTAL_RENEWABLE CONSUMPTION
+## DIFF_TOTAL_GHG ~  DIFF_TOTAL_RENEWABLE CONSUMPTION
 
 ```{r}
 c02 <- read.xlsx("data/annual-co-emissions-by-region.xlsx", sheet=2)
@@ -3005,7 +3017,7 @@ vec_c02_pred.s=data.frame(t(vec_c02_pred.s))
 
 
 ```{r}
-c02.gam <- gam(value_c02 ~ s(value_re,bs='cr') + s(value_gdp,bs='cr') + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr') + s(I(value_gdp*value_pop),bs='cr') + s(I(value_re*value_pop),bs='cr') + s(I(value_re*value_gdp*value_pop),bs='cr'), data=vec_c02.s)
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr') + s(value_gdp,bs='cr') + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr') + s(I(value_gdp*value_pop),bs='cr') + s(I(value_re*value_pop),bs='cr'), data=vec_c02.s)
 
 summary(c02.gam)
 
@@ -3014,10 +3026,10 @@ qqnorm(c02.gam$residuals)
 shapiro.test(c02.gam$residuals)
 ```
 
-Let's quit gdp and gdp-pop interaction
+Let's quit gdp and renewables-gdp interaction
 
 ```{r}
-c02.gam <- gam(value_c02 ~ s(value_re,bs='cr')  + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr')  + s(I(value_re*value_pop),bs='cr') + s(I(value_re*value_gdp*value_pop),bs='cr'), data=vec_c02.s)
+c02.gam <- gam(value_c02 ~ s(value_re,bs='cr') +  s(value_pop,bs='cr') +  s(I(value_gdp*value_pop),bs='cr') + s(I(value_re*value_pop),bs='cr'), data=vec_c02.s)
 
 summary(c02.gam)
 
@@ -3058,6 +3070,7 @@ shapiro.test(c02.gam$residuals)
 Pacf(c02.gam$residuals)
 ```
 ```{r}
+#simple baseline model
 c02.gam <- gam(value_c02 ~ s(value_re,bs='cr'), data=vec_c02)
 
 summary(c02.gam)
@@ -3068,9 +3081,10 @@ shapiro.test(c02.gam$residuals)
 ```
 
 ```{r}
+#predictions with simple model
 c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
 
-with(vec_c02, plot(seq(1991,2019) ,value_c02 ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
+with(vec_c02, plot(seq(1991,2019) ,value_c02 ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
 points(seq(2020,2030),c02.gam.preds$fit ,cex=0.5, col ="red")
 lines(seq(1991,2019),c02.gam$fitted.values,lwd=1,col="blue")
 ```
@@ -3078,11 +3092,17 @@ lines(seq(1991,2019),c02.gam$fitted.values,lwd=1,col="blue")
 
 
 ```{r}
-c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred.s, se=T)
+#predictions with more complete model
+c02.gam.preds <- predict(c02.gam,newdata=data.frame(vec_c02_pred.s,inter1=vec_c02_pred.s$value_gdp*vec_c02_pred.s$value_pop,inter2=vec_c02_pred.s$value_re*vec_c02_pred.s$value_pop) , se=T)
 
-with(vec_c02.s, plot(seq(1991,2019,1/3) ,value_c02 ,xlim=c(1990,2030),ylim=c(-1000,20),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Co2 Emissions'))
+with(vec_c02.s, plot(seq(1991,2019,1/3) ,value_c02 ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
 points(seq(2020,2030,1/3),c02.gam.preds$fit ,cex=0.5, col ="red")
 lines(seq(1991,2019,1/3),c02.gam$fitted.values,lwd=1,col="blue")
+
+
+#newdata=data.frame(vec_c02_pred.s,inter1=vec_c02_pred.s$value_re*vec_c02_pred.s$value_gdp,inter2=vec_c02_pred.s$value_re*vec_c02_pred.s$value_pop)
+#ylim=c(-1000,20)
+#inter3=vec_c02_pred.s$value_re*vec_c02_pred.s$value_gdp*vec_c02_pred.s$value_pop
 ```
 
 ```{r}
