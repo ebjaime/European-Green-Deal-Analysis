@@ -2949,40 +2949,40 @@ Import EU dataframe
 ```
 
 ```{r}
-Co2=read.xlsx("data/ghg_emissions.xlsx",sheet=3,colNames=F)
-Co2=data.frame(t(Co2))
-rownames(Co2)=years_90_19
-colnames(Co2)="ValueCo2"
-head(Co2)
+ghg=read.xlsx("data/ghg_emissions.xlsx",sheet=3,colNames=F)
+ghg=data.frame(t(ghg))
+rownames(ghg)=years_90_19
+colnames(ghg)="ValueGhg"
+head(ghg)
 
 ```
 
 
 
 ```{r}
-plot(years_90_19,Co2$ValueCo2)
+plot(years_90_19,ghg$ValueGhg)
 ```
 
 
 Core ok until here!!!
 ```{r}
-Co2.diff=data.frame(Co2[-1,]-Co2[-30,])
-colnames(Co2.diff)="diff_co2"
+ghg.diff=data.frame(ghg[-1,]-ghg[-30,])
+colnames(ghg.diff)="diff_ghg"
 ```
 
 ```{r}
-plot(seq(1991,2019),Co2.diff$diff_co2)
+plot(seq(1991,2019),ghg.diff$diff_ghg)
 ```
 
 
 ```{r}
 #using differences for covariates
-vec_c02= cbind(Co2.diff$diff_co2,vec_re$value_re,vec_oil$dif_gdp_eu,vec_oil$dif_pop_eu)
-vec_c02 <- data.frame(vec_c02)
-vec_c02_pred <- data.frame(t(renew.predictions),vec_oil_pred$dif_gdp_eu,vec_oil_pred$dif_pop_eu)
+vec_ghg= cbind(ghg.diff$diff_ghg,vec_re$value_re,vec_oil$dif_gdp_eu,vec_oil$dif_pop_eu)
+vec_ghg <- data.frame(vec_ghg)
+vec_ghg_pred <- data.frame(t(renew.predictions),vec_oil_pred$dif_gdp_eu,vec_oil_pred$dif_pop_eu)
 
-colnames(vec_c02) <- c("value_c02", "value_re","value_gdp","value_pop")
-colnames(vec_c02_pred) <- c("value_re","value_gdp","value_pop")
+colnames(vec_ghg) <- c("value_ghg", "value_re","value_gdp","value_pop")
+colnames(vec_ghg_pred) <- c("value_re","value_gdp","value_pop")
 
 ```
 
@@ -3000,19 +3000,19 @@ colnames(vec_c02_pred) <- c("value_re","value_gdp","value_pop")
 
 
 ```{r}
-rownames(vec_c02)=years_90_19[2:30]
-vec_c02.temp=t(vec_c02)
-vec_c02.s=smoothing_procedure(vec_c02.temp,1991,2019,interval=3)
-rownames(vec_c02.s)=rownames(vec_c02.temp)
-vec_c02.s=data.frame(t(vec_c02.s))
-View(vec_c02.s)
+rownames(vec_ghg)=years_90_19[2:30]
+vec_ghg.temp=t(vec_ghg)
+vec_ghg.s=smoothing_procedure(vec_ghg.temp,1991,2019,interval=3)
+rownames(vec_ghg.s)=rownames(vec_ghg.temp)
+vec_ghg.s=data.frame(t(vec_ghg.s))
+View(vec_ghg.s)
 ```
 
 ```{r}
-vec_c02_pred.temp=t(vec_c02_pred)
-vec_c02_pred.s=smoothing_procedure(vec_c02_pred.temp,2020,2030,interval=3)
-rownames(vec_c02_pred.s)=rownames(vec_c02_pred.temp)
-vec_c02_pred.s=data.frame(t(vec_c02_pred.s))
+vec_ghg_pred.temp=t(vec_ghg_pred)
+vec_ghg_pred.s=smoothing_procedure(vec_ghg_pred.temp,2020,2030,interval=3)
+rownames(vec_ghg_pred.s)=rownames(vec_ghg_pred.temp)
+vec_ghg_pred.s=data.frame(t(vec_ghg_pred.s))
 ```
 
 
@@ -3071,24 +3071,39 @@ Pacf(c02.gam$residuals)
 ```
 ```{r}
 #simple baseline model
-c02.gam <- gam(value_c02 ~ s(value_re,bs='cr'), data=vec_c02)
+ghg.gam <- gam(value_ghg ~ s(value_re,bs='cr'), data=vec_ghg)
 
-summary(c02.gam)
+summary(ghg.gam)
 
-hist(c02.gam$residuals)
-qqnorm(c02.gam$residuals)
-shapiro.test(c02.gam$residuals)
+hist(ghg.gam$residuals)
+qqnorm(ghg.gam$residuals)
+shapiro.test(ghg.gam$residuals)
 ```
 
 ```{r}
-#predictions with simple model
-c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
-
-with(vec_c02, plot(seq(1991,2019) ,value_c02 ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
-points(seq(2020,2030),c02.gam.preds$fit ,cex=0.5, col ="red")
-lines(seq(1991,2019),c02.gam$fitted.values,lwd=1,col="blue")
+Pacf(ghg.gam$residuals)
 ```
 
+
+```{r}
+#predictions with simple model
+ghg.gam.preds <- predict(ghg.gam, newdata=vec_ghg_pred, se=T)
+
+with(vec_ghg, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
+points(seq(2020,2030),ghg.gam.preds$fit ,cex=0.5, col ="red")
+lines(seq(1991,2019),ghg.gam$fitted.values,lwd=1,col="blue")
+```
+## Predicted decrease
+How much is the predicted decrease?
+
+```{r}
+Percentage_emissions=ghg[30,1]+cumsum(ghg.gam.preds$fit)
+Percentage_decrease=as.numeric(100-Percentage_emissions[11])
+
+Percentage_emissions
+Percentage_decrease
+```
+So a cut of a bit more than 39% is expected with the actual rythm, more actions are needed in order to comply with the Green Deal objective!
 
 
 ```{r}
