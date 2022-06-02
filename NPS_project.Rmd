@@ -3093,6 +3093,22 @@ with(vec_ghg, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Ye
 points(seq(2020,2030),ghg.gam.preds$fit ,cex=0.5, col ="red")
 lines(seq(1991,2019),ghg.gam$fitted.values,lwd=1,col="blue")
 ```
+We should increase the level of significance to 6.6% in order to not reject this model.
+So we also try to remove the smooth term
+
+```{r}
+#linear model
+ghg.gam.linear <- gam(value_ghg ~ value_re, data=vec_ghg)
+
+summary(ghg.gam.linear)
+
+hist(ghg.gam.linear$residuals)
+qqnorm(ghg.gam.linear$residuals)
+shapiro.test(ghg.gam.linear$residuals)
+```
+
+Same situation so we stick with the previous model
+
 ## Predicted decrease
 How much is the predicted decrease?
 
@@ -3103,7 +3119,7 @@ Percentage_decrease=as.numeric(100-Percentage_emissions[11])
 Percentage_emissions
 Percentage_decrease
 ```
-So a cut of a bit more than 39% is expected with the actual rythm, more actions are needed in order to comply with the Green Deal objective!
+A cut of 39.42% is expected with the actual rhythm, so more effort is needed in order to comply with the Green Deal objective!
 
 
 ```{r}
@@ -3119,12 +3135,6 @@ lines(seq(1991,2019,1/3),c02.gam$fitted.values,lwd=1,col="blue")
 #ylim=c(-1000,20)
 #inter3=vec_c02_pred.s$value_re*vec_c02_pred.s$value_gdp*vec_c02_pred.s$value_pop
 ```
-
-```{r}
-
-```
-
-
 
 How much is the predicted decrease?
 ```{r}
@@ -3143,9 +3153,6 @@ c02.gam.preds <- predict(c02.gam, newdata=vec_c02_pred, se=T)
 with(vec_c02, plot(rep(seq(1991,2019),34) ,value_c02 ,xlim=c(1991,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - c02 levels.'))
 points(rep(seq(2020,2030),34), consump.renew.gam.preds$fit ,lwd =2, col ="red")
 ```
-
-
-
 
 # Robustness
 
