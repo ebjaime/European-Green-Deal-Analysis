@@ -38,6 +38,7 @@ library(corrplot)
 # GAM
 library(mgcv)
 # Conformal
+#devtools::install_github(repo="ryantibs/conformal", subdir="conformalInference")
 library(conformalInference)
 library(forecast)
 
@@ -2346,7 +2347,7 @@ Keeping only European countries for which we have complete data of Gdp, Populati
 discard.idx <- rownames(consump.oil.petr.diff[-c(1,2,3),])%in%rownames(gdp.diff)
 discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
 
-# REVIEW: We smooth the non-renewable data to obtain values for each month of each year
+# We smooth the non-renewable data to obtain values for each month of each year
 consump.oil.petr.diff.s <- consump.oil.petr.diff[-1,]
 consump.fossils.diff.s <- consump.fossils.diff[-1,]
 consump.gas.diff.s <- consump.gas.diff[-1,]
@@ -2445,6 +2446,7 @@ shapiro.test(consump.oil.petr.gam$residuals)
 ```
 
 ```{r}
+# Autocorrelation function estimation
 Acf(
   consump.oil.petr.gam$residuals
 )
@@ -2452,6 +2454,7 @@ Acf(
 
 
 ```{r}
+# Partial autocorrelation function
 Pacf(
   consump.oil.petr.gam$residuals
 )
@@ -2467,6 +2470,7 @@ hist(consump.fossils.gam$residuals)
 qqnorm(consump.fossils.gam$residuals)
 shapiro.test(consump.fossils.gam$residuals)
 ```
+
 Population in this case is not significant
 
 ```{r}
@@ -2563,7 +2567,7 @@ vec_oil <- t(rbind(consump.oil.petr.diff.total,gdp.train,pop.train))
 vec_oil <- data.frame(vec_oil)
 colnames(vec_oil) <- c("dif_oil_eu","dif_gdp_eu","dif_pop_eu")
 
-
+# Variables to predict oil
 vec_oil_pred <- cbind(gdp.pred, pop.pred)
 vec_oil_pred <- data.frame(vec_oil_pred)
 
@@ -2573,7 +2577,7 @@ vec_fossil <- t(rbind(consump.fossils.diff.total,gdp.train, pop.train))
 vec_fossil <- data.frame(vec_fossil)
 colnames(vec_fossil) <- c("dif_fossil_eu","dif_gdp_eu","dif_pop_eu")
 
-
+# Variables to predict ff
 vec_fossil_pred = vec_oil_pred
 
 colnames(vec_fossil_pred) <- c("dif_gdp_eu","dif_pop_eu")
@@ -2582,7 +2586,7 @@ vec_gas <- t(rbind(consump.gas.diff.total,gdp.train, pop.train))
 vec_gas <- data.frame(vec_gas)
 colnames(vec_gas) <- c("dif_gas_eu","dif_gdp_eu","dif_pop_eu")
 
-
+# Variables to predict gas
 vec_gas_pred=vec_fossil_pred
 
 ```
@@ -2825,12 +2829,6 @@ We proceeded with yearly variations framework also for the following models
 ## DIFF_EU_RENEWABLE CONSUMPTIONS  ~ DIFF_EU_PETROLEUM  + DIFF_EU_SOLID FOSSILFUELS + DIFF_EU_NATURAL GAS:
 
 Let's try with original data, total values
-```{r}
-# Join all energies for common DF
-#vec_re <- cbind(as.numeric(consump.renew.europe[1,]),vec_oil$oil_eu,vec_fossil$fossil_eu, vec_gas$gas_eu)
-#vec_re <- data.frame(vec_re)
-#colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
-```
 
 Variations version
 ```{r}
@@ -2841,7 +2839,7 @@ vec_re <- data.frame(vec_re)
 colnames(vec_re) <- c("value_re", "value_oil", "value_ff", "value_ng")
 ```
 
-We need smoothing also on oil,fossil fuels and natural gas differences, to  fit a more complex mode with interactions
+We need smoothing also on oil,fossil fuels and natural gas differences, to fit a more complex mode with interactions
 
 ```{r}
 rownames(vec_re)=years_90_19[2:30]
@@ -2949,10 +2947,18 @@ Import EU dataframe
 ```
 
 ```{r}
-ghg=read.xlsx("data/ghg_emissions.xlsx",sheet=3,colNames=F)
-ghg=data.frame(t(ghg))
-rownames(ghg)=years_90_19
+ghg=read.xlsx("data/ghg_emissions.xlsx", sheet=3, colNames=F)
+
+ghg <- na.omit(ghg) # Remove NA values
+ghg=data.frame(t(ghg[,-1])) # Remove column names 
+ghg <- ghg[!apply(ghg == "", 1, all), ] # Remove empty values
+
+ghg <- data.frame(lapply(ghg, as.numeric)) # Set cells as numeric
+rownames(ghg) <- years_90_19
+
+ghg <- ghg[-c(1,2)]
 colnames(ghg)="ValueGhg"
+
 head(ghg)
 
 ```
@@ -3037,6 +3043,7 @@ hist(c02.gam$residuals)
 qqnorm(c02.gam$residuals)
 shapiro.test(c02.gam$residuals)
 ```
+
 With original data as covariates stop here
 ```{r}
 Pacf(c02.gam$residuals)
@@ -3054,6 +3061,7 @@ hist(c02.gam$residuals)
 qqnorm(c02.gam$residuals)
 shapiro.test(c02.gam$residuals)
 ```
+
 Quit renewables-pop interaction as well
 ```{r}
 c02.gam <- gam(value_c02 ~ s(value_re,bs='cr')  + s(value_pop,bs='cr') + s(I(value_re*value_gdp),bs='cr')  , data=vec_c02.s)
@@ -3156,8 +3164,251 @@ points(rep(seq(2020,2030),34), consump.renew.gam.preds$fit ,lwd =2, col ="red")
 
 # Robustness
 
-## TODO:
+```{r}
+library(robustbase)
+library(psych)
+library(MASS)
+library(ellipse)
+library(here)
+library(DescTools)
+library(knitr)
+library(RobStatTM)
+```
 
 
+## a. Test for outliers in diff dataset
+
+Objective: Try to spot the most extreme cases (countries) in our dataset(s), where our model could struggle the most when trying to predict future values. 
+
+```{r}
+# Standarization on differences of each country since MCD depends on Mahalannobis distance 
+sd.consump.ff.diff <- t(scale(t(consump.fossils.diff.s)))
+sd.consump.oil.diff <- t(scale(t(consump.oil.petr.diff.s)))
+sd.consump.gas.diff <- t(scale(t(consump.gas.diff.s)))
+
+sd.consump.renew.diff <- t(scale(t(consump.renew.diff[-1,])))
+
+# REVIEW: check if just from 1991-2019
+sd.pop.diff <- t(scale(t(pop.diff[,1:29])))
+sd.gdp.diff <- t(scale(t(gdp.diff[,1:29])))
+
+matplot(t(sd.consump.ff.diff), type="l")
+matplot(t(sd.consump.oil.diff), type="l")
+matplot(t(sd.consump.gas.diff), type="l")
+
+matplot(t(sd.consump.renew.diff), type="l")
+
+matplot(t(sd.gdp.diff), type="l")
+matplot(t(sd.pop.diff), type="l")
+```
+
+
+```{r}
+### MCD on dataset of various energies
+
+alpha <- .75
+```
+
+
+### a1. For Non-renewable energy consumption
+Using Fossil fuels, Oil & petroleum and Natural Gas
+```{r}
+## N -> countries
+## p -> each year
+# (E.g. on Fossil fuels consumption)
+
+# WARNING: We expect to obtain bad results since MCD handles p > n problems badly
+
+# fit_MCD.1 <- covMcd(x = consump.fossils.diff.s, alpha = .75, nsamp = "best")
+fit_MCD.1 <- covMcd(x = sd.consump.ff.diff, alpha = alpha, nsamp = "best")
+
+mcd_best.1 <- fit_MCD.1$best
+
+N <- nrow(consump.fossils.diff.s)
+p <- ncol(consump.fossils.diff.s)
+plot(consump.fossils.diff.s[,1:5], col=ifelse(1:N%in%mcd_best.1,"black","red"),pch=19)
+
+# Which are the outliers?
+rownames(consump.fossils.diff.s)[!(1:N%in%mcd_best.1)]
+```
+
+
+```{r}
+## N -> countries
+## p -> diff. type of energies/datum
+# (E.g. for 1991)
+
+sd.consump.nr.1991 <- data.frame(cbind(sd.consump.ff.diff[,1], sd.consump.gas.diff[,1], sd.consump.oil.diff[,1])) # Combine all NR energy consumptions for 1991
+colnames(sd.consump.nr.1991) <- c("FF", "Gas", "Oil") 
+rownames(sd.consump.nr.1991) <- rownames(sd.consump.ff.diff)
+sd.consump.nr.1991 <- na.omit(sd.consump.nr.1991) # Discard Cyprus and Iceland with NA values in Gas consump.
+
+fit_MCD.2 <- covMcd(x = sd.consump.nr.1991, alpha = alpha, nsamp = "best")
+
+mcd_best.2 <- fit_MCD.2$best
+
+N <- nrow(sd.consump.nr.1991)
+p <- ncol(sd.consump.nr.1991)
+pairs(sd.consump.nr.1991[,1:3], col=ifelse(1:N%in%mcd_best.2,"black","red"), pch=19)
+
+# Which are the outliers?
+rownames(sd.consump.nr.1991)[!(1:N%in%mcd_best.2)]
+
+## Try the former method for each year 1991 - 2019 to see which is the most repeated outliers
+
+nr_outliers_mcd <- function(year, alpha=.75){
+    year <- 2020-year
+    sd.consump.nr.aux <- data.frame(cbind(sd.consump.ff.diff[,year], sd.consump.gas.diff[,year], sd.consump.oil.diff[,year])) # Combine all NR energy consumptions for 1991
+    colnames(sd.consump.nr.aux) <- c("FF", "Gas", "Oil") 
+    rownames(sd.consump.nr.aux) <- rownames(sd.consump.ff.diff)
+    sd.consump.nr.aux <- na.omit(sd.consump.nr.aux) # Discard Cyprus and Iceland with NA values in Gas consump.
+    
+    fit_MCD.aux <- covMcd(x = sd.consump.nr.aux, alpha = alpha, nsamp = "best")
+    
+    mcd_best.aux <- fit_MCD.aux$best
+    
+    N <- nrow(sd.consump.nr.aux)
+    p <- ncol(sd.consump.nr.aux)
+    if(plott==T){
+        plot(fit_MCD.aux)
+    }
+    
+    # Which are the outliers?
+    return(rownames(sd.consump.nr.aux)[!(1:N%in%mcd_best.aux)])
+}
+
+# Test for 1991
+nr_outliers_mcd(1991)
+nr_outliers_mcd(1992)
+
+outliers <- NULL
+for(i in 1991:2019){
+    outliers <- c(outliers, nr_outliers_mcd(i))
+}
+
+# Get 5 most repeated outlying countries in non-renewable energies
+outl_occ <- table(outliers)
+outl_occ.sort <- outl_occ[order(outl_occ, decreasing = T)]
+outl_occ.sort[1:5] # Top 5 outliers
+
+### Plots
+
+top5.outl <- which(rownames(sd.consump.ff.diff) %in% names(outl_occ.sort[1:5])) # Get top 5 most repeated outliers
+# For the 1991 data, we can colour this top outliers as:
+pairs(sd.consump.nr.1991[,1:3], col=ifelse(1:N%in%top5.outl,"red","black"), pch=19)
+
+# Mahalannobis distance plots,
+# Distance distance plots,
+# QQplots
+# Scree plot
+plot(fit_MCD.2, classic=TRUE)
+rownames(sd.consump.nr.1991)[c(17,9,16,36)]
+
+```
+### a2. For Renewable energy consumption 
+Using renwable differences
+```{r}
+## N -> countries
+## p -> each year
+# (On the renewable levels)
+
+# WARNING: We expect to obtain bad results since MCD handles p > n problems badly
+
+fit_MCD.3 <- covMcd(x = sd.consump.renew.diff, alpha = alpha, nsamp = "best")
+
+mcd_best.3 <- fit_MCD.3$best
+
+N <- nrow(sd.consump.renew.diff)
+p <- ncol(sd.consump.renew.diff)
+plot(sd.consump.renew.diff[,1:5], col=ifelse(1:N%in%mcd_best.3,"black","red"),pch=19)
+
+# Which are the outliers?
+rownames(sd.consump.renew.diff)[!(1:N%in%mcd_best.3)]
+
+```
+
+We cannot repeat the experiment with N coutnries and each dimension being teh renewable sources, since this would be a univariate dataset, where MCD cannot be applied
+
+### a3. For extra-covariates GDP & Population
+
+The "each year as a dimension" model, as in a1 and a2 will not be skipped.
+
+
+```{r}
+## N -> countries
+## p -> 2 (population + gdp)
+# (E.g. for 1991)
+
+gdpp_outliers_mcd <- function(year, alpha=.75, plott=F){
+    year <- 2020-year
+    sd.gdpp.aux <- data.frame(cbind(sd.gdp.diff[,year], sd.pop.diff[,year])) # Combine all NR energy consumptions for 1991
+    colnames(sd.gdpp.aux) <- c("GDP", "POP") 
+    rownames(sd.gdpp.aux) <- rownames(sd.gdp.diff)
+    sd.gdpp.aux <- na.omit(sd.gdpp.aux)
+    
+    fit_MCD.aux <- covMcd(x = sd.gdpp.aux, alpha = alpha, nsamp = "best")
+    
+    mcd_best.aux <- fit_MCD.aux$best
+    
+    N <- nrow(sd.gdpp.aux)
+    p <- ncol(sd.gdpp.aux)
+    if(plott==T){
+        plot(fit_MCD.aux)
+    }
+    
+    # Which are the outliers?
+    return(rownames(sd.gdpp.aux)[!(1:N%in%mcd_best.aux)])
+}
+
+# Test for 1991
+gdpp_outliers_mcd(1991)
+gdpp_outliers_mcd(1992)
+
+outliers <- NULL
+for(i in 1991:2019){
+    outliers <- c(outliers, gdpp_outliers_mcd(i))
+}
+
+# Get 5 most repeated outlying countries in non-renewable energies
+outl_occ.gdpp <- table(outliers)
+outl_occ.sort.gdpp <- outl_occ.gdpp[order(outl_occ.gdpp, decreasing = T)]
+outl_occ.sort.gdpp[1:5] # Top 5 outliers
+
+
+### Plot
+gdpp_outliers_mcd(1994, plott=T)
+
+```
+
+
+## b. Robust linear models
+
+```{r}
+
+### LMR
+# Core 1. EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
+fit_lms.1 <- lmsreg(oil_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu,
+                           data = vec_oil)
+
+hist(fit_lms.1$residuals)
+qqnorm(fit_lms.1$residuals)
+shapiro.test(fit_lms.1$residuals)
+
+fit_lms.2 <- lmsreg(fossil_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu,
+                           data = vec_fossil)
+
+hist(fit_lms.2$residuals)
+qqnorm(fit_lms.2$residuals)
+shapiro.test(fit_lms.2$residuals)
+
+fit_lms.3 <- lmsreg(gas_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu,
+                           data = vec_gas)
+
+hist(fit_lms.3$residuals)
+qqnorm(fit_lms.3$residuals)
+shapiro.test(fit_lms.3$residuals)
+
+
+```
 
 
