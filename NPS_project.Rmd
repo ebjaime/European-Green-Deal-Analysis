@@ -1065,11 +1065,37 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-Let's quit the interaction
 
+Let's see with a permutational anova if the interaction term is significant (residuals are not gaussian)
 ```{r}
-tr_data=data.frame(t(use_solar_elec.total.s),vec_train)
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+T0 <- summary.aov(aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][3,4]
+
+aov.H0= aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data))
+aov.H0
+residuals.H0 <- aov.H0$residuals
+n = dim(tr_data)[1]
+T_perm<- numeric(B)
+
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+pb$tick(0)
+B=1000
+for(perm in 1:B){
+  permutation <- sample(n)
+  residuals.H0 <- residuals.H0[permutation]
+  risposta.perm.H0 <- aov.H0$fitted + residuals.H0
+  T_perm[perm] <- summary.aov(aov(gam(risposta.perm.H0 ~ s(gdp,bs='cr') + s(pop,bs='cr') +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][3,4] 
+pb$tick
+}
+sum(T_perm>= T0)/B
+
+
+```
+
+So we can drop the interaction term
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') ,data=tr_data)
 
 summary(model_gam)
 
@@ -1095,11 +1121,17 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-Let's quit the interaction
+Let's see if the interaction term is significant (residuals are gaussian)
 
 ```{r}
-tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+anova(model_gam_reduced,model_gam,test="F")
+```
+
+Also here we can quit the interaction term
+
+```{r}
+model_gam=model_gam_reduced
 
 summary(model_gam)
 
@@ -1107,30 +1139,27 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-We should quit population as well
+
+We should also try to quit population (residuals are gaussian)
 
 ```{r}
-tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
-model_gam=gam(European_Union ~ s(gdp,bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') ,data=tr_data)
+anova(model_gam_reduced,model_gam,test="F")
 ```
 
+Seems like population is significant after all...
 
 ```{r}
 Pacf(model_gam$residuals)
 ```
+
 
 Differences are much needed...
 
 Since working with original data gave us residuals with high correlations, we decided to fit models using the year to year variations. We construct some GAM models on which we perform conformal prediction.
 Each time we search for the best GAM model by looking at the significance of the covariates and the adjusted R squared.
 
-First order differences
+#### First order differences dataframes
 ```{r}
 # Not in SSP GDP data and in electricity data
 discard.idx <- rownames(use_solar_elec[-c(1,2,3),])%in%rownames(gdp.diff)
@@ -1226,130 +1255,73 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-Let's try quitting one covariate at a time. We start quitting population
+Let's try quitting one covariate at a time. We start quitting the interaction term
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+anova(model_gam_reduced,model_gam,test="F")
 ```
-Let's put back population and quit gdp
+Let's put back the interraction term and quit gdp
 
 ```{r}
-model_gam=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+anova(model_gam_reduced,model_gam,test="F")
 ```
-Let's put back gdp and quit the interaction term
+Let's put back gdp and quit population
 
 
 ```{r}
-model_gam=gam(European_Union ~ s(pop,bs='cr') + s(gdp,bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
-summary(model_gam)
+anova(model_gam_reduced,model_gam,test="F")
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
 ```
 
 Let's try quitting the smooth terms, one at a time
 ```{r}
-model_gam=gam(European_Union ~ gdp + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam1=lm(European_Union ~ bs(gdp) + bs(pop) + gdp:pop,data=tr_data)
 
-summary(model_gam)
+summary(model_gam1)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam1$residuals)
+qqnorm(model_gam1$residuals)
+shapiro.test(model_gam1$residuals)
 ```
 
 ```{r}
-model_gam=gam(European_Union ~  s(gdp,bs='cr') + pop + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam2=lm(European_Union ~ bs(gdp) + pop + bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+summary(model_gam2)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam2$residuals)
+qqnorm(model_gam2$residuals)
+shapiro.test(model_gam2$residuals)
 ```
 
 
 ```{r}
-model_gam=gam(European_Union ~ s(gdp, bs='cr') + s(pop,bs='cr') + gdp:pop,data=tr_data)
+model_gam3=lm(European_Union ~ gdp + bs(pop) + bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+summary(model_gam3)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
 ```
 
+
+By looking at R squared and singular signifiance, the second one seems the best, let's go with it
 ```{r}
-model_gam=gam(European_Union ~ gdp + s(pop, bs='cr') + gdp:pop,data=tr_data)
+model_gam_wind=model_gam2
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
 ```
-Let's try quitting population term
-
-```{r}
-model_gam=gam(European_Union ~ gdp + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~ s(gdp, bs='cr') + pop + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~ gdp + pop + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-Let's try quitting gdp term
-
-```{r}
-model_gam_wind=gam(European_Union ~ pop + gdp:pop,data=tr_data)
-
-summary(model_gam_wind)
-
-hist(model_gam_wind$residuals)
-qqnorm(model_gam_wind$residuals)
-shapiro.test(model_gam_wind$residuals)
-```
-We stick with this last model that considers linear contribution from population and their interaction
-
 
 ```{r}
 Pacf(model_gam_wind$residuals)
 ```
-Unfortunately there is again a bit of correlation at 1 step but this could be due to the smoothing that we had to apply in order to construct the models (as mentioned before). Anyway it is clearly better than the corresponding best model constructed with original data.
+
+Unfortunately there is again a bit of correlation at 2 steps but this could be due to the smoothing that we had to apply in order to construct the models (as mentioned before). Anyway it is clearly better than the corresponding best model constructed with original data.
 
 
 #### Hydro model - First order differences
@@ -1367,144 +1339,171 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-Let's try quitting one covariate at a time
+
+Let's try quitting one covariate at a time (residuals are gaussian)
 
 ```{r}
-model_gam=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+anova(model_gam_reduced,model_gam,test="F")
 ```
+
+
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+anova(model_gam_reduced,model_gam,test="F")
 ```
+
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') ,data=tr_data)
+model_gam_reduced=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr') ,data=tr_data)
 
-summary(model_gam)
+anova(model_gam_reduced,model_gam,test="F")
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
 ```
+
 Let's try quitting the smooth terms, one at a time
 
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + gdp:pop ,data=tr_data)
+model_gam1=lm(European_Union ~ bs(gdp) + bs(pop) + gdp:pop,data=tr_data)
 
-summary(model_gam)
+summary(model_gam1)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-```{r}
-model_gam=gam(European_Union ~ pop + s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-```{r}
-model_gam=gam(European_Union ~ s(pop,bs='cr')+ gdp + s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam1$residuals)
+qqnorm(model_gam1$residuals)
+shapiro.test(model_gam1$residuals)
 ```
 
 ```{r}
-model_gam=gam(European_Union ~ pop + gdp + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam2=lm(European_Union ~ bs(gdp) + pop + bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+summary(model_gam2)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~ s(pop,bs='cr') + gdp + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~  gdp + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~ gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam2$residuals)
+qqnorm(model_gam2$residuals)
+shapiro.test(model_gam2$residuals)
 ```
 
 
 ```{r}
-model_gam=gam(European_Union ~ pop + gdp + gdp:pop,data=tr_data)
+model_gam3=lm(European_Union ~ gdp + bs(pop) + bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+summary(model_gam3)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
+```
+
+From the third one, let's try to quit the interaction term (residuals are gaussian)
+
+```{r}
+model_gam_reduced=lm(European_Union ~ gdp + bs(pop),data=tr_data)
+
+anova(model_gam_reduced,model_gam3,test="F")
+```
+We can quit the interaction term
+
+```{r}
+model_gam3=model_gam_reduced
+
+summary(model_gam3)
+
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
+```
+Let's try quit the gdp (residuals are gaussian)
+
+```{r}
+model_gam_reduced=lm(European_Union ~ bs(pop),data=tr_data)
+
+anova(model_gam_reduced,model_gam3,test="F")
+```
+We can quit gdp
+
+```{r}
+model_gam3=model_gam_reduced
+
+summary(model_gam3)
+
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
+```
+Let's get back to the complete model and now we try to quit two smooth terms at a time
+
+```{r}
+model_gam1=lm(European_Union ~ bs(gdp) + pop + gdp:pop,data=tr_data)
+
+summary(model_gam1)
+
+hist(model_gam1$residuals)
+qqnorm(model_gam1$residuals)
+shapiro.test(model_gam1$residuals)
+```
+
+
+```{r}
+model_gam2=lm(European_Union ~ gdp + bs(pop) + gdp:pop,data=tr_data)
+
+summary(model_gam2)
+
+hist(model_gam2$residuals)
+qqnorm(model_gam2$residuals)
+shapiro.test(model_gam2$residuals)
 ```
 
 ```{r}
-model_gam=gam(European_Union ~ pop + pop:gdp,data=tr_data)
+model_gam3=lm(European_Union ~ gdp + pop + bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+summary(model_gam3)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
 ```
+
+From the third model we start quitting the interaction term (residuals are gaussian)
+
 ```{r}
-model_gam=gam(European_Union ~ pop,data=tr_data)
+model_gam_reduced=lm(European_Union ~ gdp + pop,data=tr_data)
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+anova(model_gam_reduced,model_gam3,test="F")
 ```
+
+We can quit the interaction term
+
+```{r}
+model_gam3=model_gam_reduced
+
+summary(model_gam3)
+
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
+```
+
+Let's try quitting gdp (residuals are gaussian)
+```{r}
+model_gam_reduced=lm(European_Union ~  pop,data=tr_data)
+
+anova(model_gam_reduced,model_gam3,test="F")
+```
+We can quit gdp
+
+
+```{r}
+model_gam3=model_gam_reduced
+
+summary(model_gam3)
+
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
+```
+
+
 Let's try to explain the differences of hydro usage with original data of EU gdp and population
 
 ```{r}
@@ -1519,6 +1518,7 @@ colnames(vec_test)=c("gdp","pop")
 
 vec_train
 ```
+
 ```{r}
 tr_data=data.frame(t(use_hydro_elec.diff.total),vec_train)
 colnames(tr_data)[1]="European_Union"
@@ -1531,153 +1531,21 @@ qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
 
-Let's quit the interaction
+Let's try to quit the interaction (residuals are gaussian)
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~  s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+anova(model_gam_reduced,model_gam,test="F")
 ```
 
-Let's quit gdp as well
+We cannot quit the interaction term, let's try with gdp
 ```{r}
-model_gam=gam(European_Union ~ s(pop,bs='cr'),data=tr_data)
+model_gam_reduced=gam(European_Union ~  s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+anova(model_gam_reduced,model_gam,test="F")
 ```
 
-Let's quit smooth terms one at a time
-```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-Let's quit gdp
-```{r}
-model_gam=gam(European_Union ~ s(pop,bs='cr') + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~ gdp + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-Let's quit the interaction term
-```{r}
-model_gam=gam(European_Union ~ gdp+ s(pop,bs='cr') ,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-Let's quit gdp
-```{r}
-model_gam=gam(European_Union ~ pop + s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-Let's quit the interaction
-```{r}
-model_gam=gam(European_Union ~ pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-Let's continue to search for a more complete model
-```{r}
-model_gam=gam(European_Union ~ gdp+ pop+ s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-Let's quit population
-
-```{r}
-model_gam=gam(European_Union ~ gdp+  s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-Quit the interaction
-```{r}
-model_gam=gam(European_Union ~ gdp,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-Quit gdp
-```{r}
-model_gam=gam(European_Union ~ pop + gdp:pop ,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-Better...
-
+We cannot quit gdp either, so we have our model
 
 ```{r}
 Pacf(model_gam$residuals)
@@ -1716,7 +1584,33 @@ qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
 
-Quit one at a time
+Again, let's quit one covariate at a time (residuals are not gaussian)
+```{r}
+T0 <- summary.aov(aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][3,4]
+
+aov.H0= aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data))
+aov.H0
+residuals.H0 <- aov.H0$residuals
+n = dim(tr_data)[1]
+T_perm<- numeric(B)
+
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+pb$tick(0)
+B=1000
+for(perm in 1:B){
+  permutation <- sample(n)
+  residuals.H0 <- residuals.H0[permutation]
+  risposta.perm.H0 <- aov.H0$fitted + residuals.H0
+  T_perm[perm] <- summary.aov(aov(gam(risposta.perm.H0 ~ s(gdp,bs='cr') + s(pop,bs='cr') +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][3,4] 
+pb$tick
+}
+sum(T_perm>= T0)/B
+```
+
+We can quit the interaction term
+
 ```{r}
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
 
@@ -1726,7 +1620,34 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+Let's try to quit pop (residuals are not gaussians)
 
+```{r}
+T0 <- summary.aov(aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)))[[1]][2,4]
+
+aov.H0= aov(gam(European_Union ~ s(gdp,bs='cr'),data=tr_data))
+aov.H0
+residuals.H0 <- aov.H0$residuals
+n = dim(tr_data)[1]
+T_perm<- numeric(B)
+
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+pb$tick(0)
+B=1000
+for(perm in 1:B){
+  permutation <- sample(n)
+  residuals.H0 <- residuals.H0[permutation]
+  risposta.perm.H0 <- aov.H0$fitted + residuals.H0
+  T_perm[perm] <- summary.aov(aov(gam(risposta.perm.H0 ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)))[[1]][2,4] 
+pb$tick
+}
+sum(T_perm>= T0)/B
+```
+
+
+So we can quit pop too
 ```{r}
 model_gam=gam(European_Union ~ s(gdp,bs='cr'),data=tr_data)
 
@@ -1736,124 +1657,68 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-Quit smooth terms, one at a time
+
+Let's try to quit one smooth term at a time
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + gdp:pop,data=tr_data)
+model_gam1=lm(European_Union ~ bs(gdp) + bs(pop) + gdp:pop,data=tr_data)
 
-summary(model_gam)
+summary(model_gam1)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam1$residuals)
+qqnorm(model_gam1$residuals)
+shapiro.test(model_gam1$residuals)
 ```
 
 ```{r}
-model_gam=gam(European_Union ~ gdp + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam2=lm(European_Union ~ bs(gdp) + pop + bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+summary(model_gam2)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam2$residuals)
+qqnorm(model_gam2$residuals)
+shapiro.test(model_gam2$residuals)
 ```
 
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam3=lm(European_Union ~ gdp + bs(pop) + bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+summary(model_gam3)
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
+hist(model_gam3$residuals)
+qqnorm(model_gam3$residuals)
+shapiro.test(model_gam3$residuals)
 ```
+
+Starting from the second, we could try to lower the degree of gdp spline (residuals are gaussian)
 
 ```{r}
-model_gam=gam(European_Union ~ gdp + pop +  s(I(gdp*pop),bs='cr'),data=tr_data)
+model_gam_reduced=lm(European_Union ~ bs(gdp,degree=2) + pop+ bs(I(gdp*pop)),data=tr_data)
 
-summary(model_gam)
+anova(model_gam_reduced,model_gam2,test="F")
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
 ```
+
+So we cannot reduce the degree of gdp spline to degree 2
+Let's try to lower the degree of the interaction term
+
+
+
 
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + pop + gdp:pop,data=tr_data)
+model_gam_reduced=lm(European_Union ~ bs(gdp) + pop+ bs(I(gdp*pop),degree=2),data=tr_data)
 
-summary(model_gam)
+anova(model_gam_reduced,model_gam2,test="F")
 
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
 ```
 
-```{r}
-model_gam=gam(European_Union ~ gdp+ s(pop,bs='cr') + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-Let's quit population
-
-```{r}
-model_gam=gam(European_Union ~ gdp + gdp:pop,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-Quit the interaction
-
-```{r}
-model_gam=gam(European_Union ~ gdp,data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
-Let's move again to original data of gdp and population to construct this model
-```{r}
-#vectors for EU total data
-vec_train = cbind(as.numeric(gdp.elec.train.s[,3:31]), as.numeric(pop.elec.train.s[,3:31]))
-vec_train=data.frame(vec_train)
-colnames(vec_train)=c("gdp","pop")
-
-vec_test = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
-vec_test=data.frame(vec_test)
-colnames(vec_test)=c("gdp","pop")
-
-vec_train
-```
-
-```{r}
-tr_data=data.frame(t(use_solar_elec.diff.total),vec_train)
-colnames(tr_data)[1]="European_Union"
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
-
-summary(model_gam)
-
-hist(model_gam$residuals)
-qqnorm(model_gam$residuals)
-shapiro.test(model_gam$residuals)
-```
-
+We cannot reduce the interaction spline degree either, so we have our model
 
 ```{r}
 Pacf(model_gam$residuals)
 ```
-Some high correlations in residuals but we stick with this model
+High correlation in 1 step residuals but we stick with this model
 ```{r}
-model_gam_solar=model_gam
+model_gam_solar=model_gam2
 ```
 
 Little review of the selected models
@@ -1872,7 +1737,7 @@ summary(model_gam_solar)
 
 ```
 
-
+Core ok until here!!!
 
 ### Predictions
 
