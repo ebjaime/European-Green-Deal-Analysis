@@ -33,7 +33,6 @@ library(fdatest)
 library(rgl)
 library(hexbin)
 library(ggplot2)
-library(rgl)
 library(corrplot)
 # GAM
 library(mgcv)
@@ -85,8 +84,8 @@ preprocess <- function(df, start_nrows=6, end_nrows=2, tj=T) {
 }
 
 
-# REVIEW: Function for creating a smoothing procedure for any data given an interval:
-# Interval corresponds to the frequency in each year: 2 each 6 months
+# Function for creating a smoothing procedure for any data given an interval:
+# Interval corresponds to the frequency in each year: 2 =each 6 months, 3=each 4 months...
 smoothing_procedure <- function (data, from, to, write_to=NA, interval=3, row_names=NULL){
     
     new.data <- data.frame(matrix(ncol =length(from:to), nrow = 0))
@@ -111,7 +110,7 @@ smoothing_procedure <- function (data, from, to, write_to=NA, interval=3, row_na
         
         xfd <- ys$fd
         
-        data.yby <- eval.fd(seq(min(n.comb.year.grid),max(n.comb.year.grid), 1/interval), xfd) # Obtain data year by year
+        data.yby <- eval.fd(seq(min(n.comb.year.grid),max(n.comb.year.grid), 1/interval), xfd) #            Obtain data year by year
         
         new.data <- rbind(new.data, c( rep(NA, ((to-from) + 1 - length(n.comb.year.grid))*interval),
                                        data.yby))
@@ -204,19 +203,6 @@ prod.by.fuel.renew=prod.by.fuel.renew[-1,]
 ```
 
 
-We can check what we obtain in total:
-
-```{r}
-#consump.total.p <-  consump.renew.p[2,1] +
-                    #consump.oil.petr.p[2,1] +
-                    #consump.fossils.p[2,1] +
-                    #consump.gas.p[2,1]
-                    # derived.heat +
-                    # electricity 
-#consump.total.p
-```
-
-
 To visualize the obtained data, we can plot European renewable and non renewable consumption levels:
 
 ```{r}
@@ -262,10 +248,10 @@ consump.fossils.europe <- consump.fossils.p[3,]
 consump.renew.europe <- consump.renew.p[3,]
 
 colnames(energy.balances.countries)=year.grid
-colnames(energy.fossils.countries)=year.grid
-colnames(energy.oil.petr.countries)=year.grid
-colnames(energy.gas.countries)=year.grid
-colnames(energy.renew.countries)=year.grid
+colnames(consump.fossils.countries)=year.grid
+colnames(consump.oil.petr.countries)=year.grid
+colnames(consump.gas.countries)=year.grid
+colnames(consump.renew.countries)=year.grid
 ```
 
 Since we are working with time series, by their nature data are yearly correlated.
@@ -355,11 +341,34 @@ p.values.ng <- numeric(length(countries.list)) # Natural gas
 p.values.re <- numeric(length(countries.list)) # RE
 # FIXME: Error in shapiro.test(t(consump.gas.diff)[, c]) :  all 'x' values are identical
 for(c in 1:length(countries.list)){
-    p.values.ff[c] <- shapiro.test(t(consump.fossils.diff)[,c])$p.value
-    p.values.op[c] <- shapiro.test(t(consump.oil.petr.diff)[,c])$p.value
-    p.values.ng[c] <- shapiro.test(t(consump.gas.diff)[,c])$p.value # Ignore errors
-    p.values.re[c] <- shapiro.test(t(consump.renew.diff)[,c])$p.value
-
+  
+  if (identical(diff(as.numeric(t(consump.fossils.diff[-c(1,2,3,4),])[,c])),rep(0,length(as.numeric(t(consump.fossils.diff[-c(1,2,3,4),])[,c]))-1)))  #we check that values are not all equal, if it happens we put a simbolic value in the vector of p-values.
+    
+  {p.values.ff[c]=2 }#simbolic value
+  else{
+    p.values.ff[c] <- shapiro.test(t(consump.fossils.diff[-c(1,2,3,4),])[,c])$p.value
+  }
+  
+  if(identical(diff(as.numeric(t(consump.oil.petr.diff[-c(1,2,3,4),])[,c])),rep(0,length(as.numeric(t(consump.oil.petr.diff[-c(1,2,3,4),])[,c]))-1)))
+    
+  {p.values.op[c]=2}
+  else{
+    p.values.op[c] <- shapiro.test(t(consump.oil.petr.diff[-c(1,2,3,4),])[,c])$p.value
+  }
+  
+  if(identical(diff(as.numeric(t(consump.gas.diff[-c(1,2,3,4),])[,c])),rep(0,length(as.numeric(t(consump.gas.diff[-c(1,2,3,4),])[,c]))-1))) 
+    
+  {p.values.ng[c]=2}
+  else{
+    p.values.ng[c] <- shapiro.test(t(consump.gas.diff[-c(1,2,3,4),])[,c])$p.value
+  }
+  
+  if(identical(diff(as.numeric(t(consump.renew.diff[-c(1,2,3,4),])[,c])),rep(0,length(as.numeric(t(consump.renew.diff[-c(1,2,3,4),])[,c]))-1)))
+    
+  {p.values.re[c]=2}
+  else{
+    p.values.re[c] <- shapiro.test(t(consump.renew.diff[-c(1,2,3,4),])[,c])$p.value
+  }
 }
 hist(p.values.ff,breaks=20)
 hist(p.values.op,breaks=20)
@@ -367,7 +376,7 @@ hist(p.values.ng,breaks=20)
 hist(p.values.re,breaks=20)
 ```
 
-### Permutational Two Population MV test - Comparing Consumption distributions
+### Permutational Multivariate tests - Comparing Consumption distributions
 
 We want to compare the distributions of Non Renewable vs Renewable fuels for each country:
 ```{r}
@@ -381,22 +390,25 @@ matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
                                        consump.gas.mean,
                                        consump.renew.mean)),
         type="l",main="Consumption means for each type of fuel",xlab="Years",ylab="Terajoules",
-        ylim=c(0,range(consump.fossils.mean)[2]+300000))
+        ylim=c(0,range(consump.fossils.mean)[2]+300000),lwd=2)
 
 legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas","Renewable Energies"), col=1:4, pch=2)
 
 
 ```
+
 Plot of only non-renewables
 ```{r}
 matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
                                        consump.oil.petr.mean,
                                        consump.gas.mean)),
-        type="l",main="Consumption means for each type of non renewable fuel",xlab="Years",ylab="Terajoules",lwd=2,lty=1,
+        type="l",main="Consumption means for each type of non renewable fuel",xlab="Years",ylab="Terajoules",lwd=2,
         ylim=c(min(consump.fossils.mean)-30000,max(consump.fossils.mean)+30000))
 
 legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas"), col=1:3, pch=2)
 ```
+
+
 We start with a permutational MANOVA to see whether the three non renewable sources have the same distribution
 
 ```{r}
@@ -442,6 +454,8 @@ p_val <- sum(T_stat>=T0)/B
 p_val
 ```
 
+
+Non-renewables coupled permutational tests
 ```{r}
 
 # H0: Distributions are equal
@@ -483,10 +497,10 @@ for(perm in 1:B){
 }
 
 # Graphics for the permutational distribution
-hist(T1,xlim=range(c(T1,T10)))
+hist(T1,xlim=range(c(T1,T10)),main="Test statistic permutational distribution")
 abline(v=T10,col=3,lwd=4)
 
-plot(ecdf(T1))
+plot(ecdf(T1),main="Test statistic permutational ecdf")
 abline(v=T10,col=3,lwd=4)
 
 # Calculate p-value
@@ -533,10 +547,10 @@ for(perm in 1:B){
 }
 
 # Graphics for the permutational distribution
-hist(T2,xlim=range(c(T2,T20)))
+hist(T2,xlim=range(c(T2,T20)),main="Test statistic permutational distribution")
 abline(v=T20,col=3,lwd=4)
 
-plot(ecdf(T2))
+plot(ecdf(T2),main="Test statistic permutational ecdf")
 abline(v=T20,col=3,lwd=4)
 
 # Calculate p-value
@@ -584,10 +598,10 @@ for(perm in 1:B){
 }
 
 # Graphics for the permutational distribution
-hist(T2,xlim=range(c(T2,T20)))
+hist(T2,xlim=range(c(T2,T20)),main="Test statistic permutational distribution")
 abline(v=T20,col=3,lwd=4)
 
-plot(ecdf(T2))
+plot(ecdf(T2),main="Test statistic permutational ecdf")
 abline(v=T20,col=3,lwd=4)
 
 # Calculate p-value
@@ -596,14 +610,15 @@ p_val
 
 ```
 
+We never reject the null hypothesis so we can assume that in average the 3 non-renewable sources are decreasing at the same rate.
 
-What about using year-to-year variates? Does the renewable consumption growth follow the same distribution as the non renewable decrease?
+
+Does the renewable consumption growth follow the same distribution as the non renewable decrease?
 ```{r}
 
-# RE vs OP ----------------------------------------------------------------
-# Use year by year change of each energy (RE vs OP (or NG or FF))
+# RE vs Non-RE ----------------------------------------------------------------
+# Use year by year change of each energy
 
-#FIXME: Error in Ops.data.frame(consump.fossils.countries[, ] + consump.gas.countries[,  : ‘+’ only defined for equally-sized data frames
 mean.consump.nonrenew <-(consump.fossils.countries+consump.gas.countries+consump.oil.petr.countries )/3
 mean.consump.nonrenew.mean=colMeans(mean.consump.nonrenew)
 
@@ -819,7 +834,7 @@ legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 ```
 
 
-Seems like Hydro is uniformly more used than the other two, let's proceed to statistically test this fact
+Seems like Hydro is uniformly more used than the other two.
 Seems like Hydro has less variations than the other two, let's proceed to statistically test this fact
 
 Observed statistic:
@@ -981,10 +996,10 @@ Montenegro and Albania should be discarded as they have NaN values or no informa
 
 
 
-Since we have data only from 2004 (instead of 1990) to 2019, more points are needed to construct predicting models. We generate these points through a smoothing procedure, obtaining monthly data.
+Since we have data only from 2004 (instead of 1990) to 2019, more points are needed to construct predicting models. We generate these points through a smoothing procedure, obtaining semestral data.
 
 
-Smoothing for solar, wind and hydro to obtain data for each month (total values)
+Smoothing for solar, wind and hydro to obtain data for each semester (total values)
 ```{r}
 use_solar_elec.total.s <- smoothing_procedure(use_solar_elec.total, 2004, 2019, interval=2, row_names = rownames(use_solar_elec.total))
 use_wind_elec.total.s <- smoothing_procedure(use_wind_elec.total, 2004, 2019, interval=2, row_names = rownames(use_wind_elec.total))
@@ -1041,6 +1056,13 @@ Let's find the adequate models to use for conformal prediction
 ```{r}
 tr_data=data.frame(t(use_wind_elec.total.s),vec_train)
 colnames(tr_data)[1]="European_Union"
+with(tr_data,plot(gdp,European_Union,main="Wind electricity vs gdp"))
+with(tr_data,plot(pop,European_Union,main="Wind electricity vs pop"))
+```
+
+
+```{r}
+
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1051,12 +1073,25 @@ shapiro.test(model_gam$residuals)
 ```
 
 ```{r}
+Acf(model_gam$residuals)
+```
+
+
+```{r}
 Pacf(model_gam$residuals)
 ```
 
 #### Solar model - original data
 ```{r}
 tr_data=data.frame(t(use_solar_elec.total.s),vec_train)
+
+with(tr_data,plot(gdp,European_Union,main="Solar electricity vs gdp"))
+with(tr_data,plot(pop,European_Union,main="Solar electricity vs pop"))
+
+```
+
+```{r}
+
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1093,9 +1128,60 @@ sum(T_perm>= T0)/B
 
 ```
 
-So we can drop the interaction term
+So we cannot drop the interaction term, let's try to quit the gdp
 ```{r}
-model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') ,data=tr_data)
+T0 <- summary.aov(aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][1,4]
+
+aov.H0= aov(gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data))
+aov.H0
+residuals.H0 <- aov.H0$residuals
+n = dim(tr_data)[1]
+T_perm<- numeric(B)
+
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+pb$tick(0)
+B=1000
+for(perm in 1:B){
+  permutation <- sample(n)
+  residuals.H0 <- residuals.H0[permutation]
+  risposta.perm.H0 <- aov.H0$fitted + residuals.H0
+  T_perm[perm] <- summary.aov(aov(gam(risposta.perm.H0 ~ s(gdp,bs='cr') + s(pop,bs='cr') +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][1,4] 
+pb$tick
+}
+sum(T_perm>= T0)/B
+```
+
+Let's also try to drop the population term
+```{r}
+T0 <- summary.aov(aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][2,4]
+
+aov.H0= aov(gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data))
+aov.H0
+residuals.H0 <- aov.H0$residuals
+n = dim(tr_data)[1]
+T_perm<- numeric(B)
+
+pb <- progress_bar$new(
+    format = "  processing [:bar] :percent eta: :eta",
+    total = B, clear = FALSE)
+pb$tick(0)
+B=1000
+for(perm in 1:B){
+  permutation <- sample(n)
+  residuals.H0 <- residuals.H0[permutation]
+  risposta.perm.H0 <- aov.H0$fitted + residuals.H0
+  T_perm[perm] <- summary.aov(aov(gam(risposta.perm.H0 ~ s(gdp,bs='cr') + s(pop,bs='cr') +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][2,4] 
+pb$tick
+}
+sum(T_perm>= T0)/B
+```
+
+We can drop it
+
+```{r}
+model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
 
@@ -1104,6 +1190,10 @@ qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
 
+```{r}
+Acf(model_gam$residuals)
+
+```
 
 ```{r}
 Pacf(model_gam$residuals)
@@ -1113,6 +1203,15 @@ Pacf(model_gam$residuals)
 #### Hydro model - original data
 ```{r}
 tr_data=data.frame(t(use_hydro_elec.total.s),vec_train)
+
+with(tr_data,plot(gdp,European_Union,main="Hydro electricity vs gdp"))
+with(tr_data,plot(pop,European_Union,main="Hydro electricity vs pop"))
+
+```
+
+
+```{r}
+
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1128,7 +1227,7 @@ model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_d
 anova(model_gam_reduced,model_gam,test="F")
 ```
 
-Also here we can quit the interaction term
+We can quit the interaction term
 
 ```{r}
 model_gam=model_gam_reduced
@@ -1148,6 +1247,11 @@ anova(model_gam_reduced,model_gam,test="F")
 ```
 
 Seems like population is significant after all...
+
+```{r}
+Acf(model_gam$residuals)
+```
+
 
 ```{r}
 Pacf(model_gam$residuals)
@@ -1245,8 +1349,16 @@ vec_train
 #### Wind model - First order differences
 
 ```{r}
-tr_data=data.frame(t(use_wind_elec.diff.total),vec_train)
+tr_data=data.frame(t(use_wind_elec.diff.total.s),vec_train)
 colnames(tr_data)[1]="European_Union"
+
+with(tr_data,plot(gdp,European_Union,main="Wind diff electricity vs diff gdp"))
+with(tr_data,plot(pop,European_Union,main="Wind diff electricity vs diff pop"))
+
+```
+
+```{r}
+
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1255,7 +1367,7 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
-Let's try quitting one covariate at a time. We start quitting the interaction term
+Let's try quitting one covariate at a time. We start quitting the interaction term (gaussian residuals)
 ```{r}
 model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
 
@@ -1311,10 +1423,15 @@ shapiro.test(model_gam3$residuals)
 ```
 
 
-By looking at R squared and singular signifiance, the second one seems the best, let's go with it
+By looking at R squared and singular significance, the second one seems the best, let's go with it
 ```{r}
 model_gam_wind=model_gam2
 
+```
+
+
+```{r}
+Acf(model_gam_wind$residuals)
 ```
 
 ```{r}
@@ -1329,8 +1446,16 @@ Unfortunately there is again a bit of correlation at 2 steps but this could be d
 Let's go on constructing hydro model
 
 ```{r}
-tr_data=data.frame(t(use_hydro_elec.diff.total),vec_train)
+tr_data=data.frame(t(use_hydro_elec.diff.total.s),vec_train)
 colnames(tr_data)[1]="European_Union"
+
+with(tr_data,plot(gdp,European_Union,main="Hydro diff electricity vs diff gdp"))
+with(tr_data,plot(pop,European_Union,main="Hydro diff electricity vs diff pop"))
+
+```
+
+```{r}
+
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1503,6 +1628,78 @@ qqnorm(model_gam3$residuals)
 shapiro.test(model_gam3$residuals)
 ```
 
+Go back to the first model
+```{r}
+summary(model_gam1)
+shapiro.test(model_gam1$residuals)
+```
+
+Let's try to quit the gdp (gaussian residuals)
+```{r}
+model_gam_reduced=lm(European_Union ~  pop + gdp:pop,data=tr_data)
+
+anova(model_gam_reduced,model_gam1,test="F")
+```
+
+We can quit it
+```{r}
+model_gam1=model_gam_reduced
+
+summary(model_gam1)
+
+hist(model_gam1$residuals)
+qqnorm(model_gam1$residuals)
+shapiro.test(model_gam1$residuals)
+```
+
+Let's try to quit the interaction (gaussian residuals)
+```{r}
+model_gam_reduced=lm(European_Union ~  pop,data=tr_data)
+
+anova(model_gam_reduced,model_gam1,test="F")
+```
+
+We obtain the same result as before so we should try with the second model
+```{r}
+summary(model_gam2)
+shapiro.test(model_gam2$residuals)
+```
+
+Let's try to quit the interaction
+```{r}
+model_gam_reduced=lm(European_Union ~ gdp + bs(pop),data=tr_data)
+
+anova(model_gam_reduced,model_gam2,test="F")
+```
+
+We quit it
+```{r}
+model_gam2=model_gam_reduced
+
+summary(model_gam2)
+
+hist(model_gam2$residuals)
+qqnorm(model_gam2$residuals)
+shapiro.test(model_gam2$residuals)
+```
+
+Try to quit gdp (gaussian residuals)
+```{r}
+model_gam_reduced=lm(European_Union ~  bs(pop),data=tr_data)
+
+anova(model_gam_reduced,model_gam2,test="F")
+```
+
+We can quit it
+```{r}
+model_gam2=model_gam_reduced
+
+summary(model_gam2)
+
+hist(model_gam2$residuals)
+qqnorm(model_gam2$residuals)
+shapiro.test(model_gam2$residuals)
+```
 
 Let's try to explain the differences of hydro usage with original data of EU gdp and population
 
@@ -1520,8 +1717,16 @@ vec_train
 ```
 
 ```{r}
-tr_data=data.frame(t(use_hydro_elec.diff.total),vec_train)
+tr_data=data.frame(t(use_hydro_elec.diff.total.s),vec_train)
 colnames(tr_data)[1]="European_Union"
+
+with(tr_data,plot(gdp,European_Union,main="Hydro diff electricity vs gdp"))
+with(tr_data,plot(pop,European_Union,main="Hydro diff electricity vs pop"))
+
+```
+
+```{r}
+
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1548,6 +1753,12 @@ anova(model_gam_reduced,model_gam,test="F")
 We cannot quit gdp either, so we have our model
 
 ```{r}
+Acf(model_gam$residuals)
+
+```
+
+
+```{r}
 Pacf(model_gam$residuals)
 ```
 
@@ -1558,7 +1769,7 @@ model_gam_hydro=model_gam
 
 #### Solar model - First order differences
 
-Let's go back to yearly variation datasets
+Let's go back to yearly variations datasets
 ```{r}
 #vectors for EU yearly variations
 vec_train = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
@@ -1573,8 +1784,16 @@ vec_train
 ```
 
 ```{r}
-tr_data=data.frame(t(use_solar_elec.diff.total),vec_train)
+tr_data=data.frame(t(use_solar_elec.diff.total.s),vec_train)
 colnames(tr_data)[1]="European_Union"
+
+with(tr_data,plot(gdp,European_Union,main="Solar diff electricity vs diff gdp"))
+with(tr_data,plot(pop,European_Union,main="Solar diff electricity vs diff pop"))
+
+```
+
+```{r}
+
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1712,6 +1931,12 @@ anova(model_gam_reduced,model_gam2,test="F")
 ```
 
 We cannot reduce the interaction spline degree either, so we have our model
+
+```{r}
+Acf(model_gam2$residuals)
+
+```
+
 
 ```{r}
 Pacf(model_gam2$residuals)
@@ -1864,22 +2089,33 @@ c_preds.solar.total <- conformal.pred(
     verbose=T, 
     train.fun = train_gam_solar, 
     predict.fun = predict_gam_solar)
-
-#Error in gam(y ~ s(gdp) + s(pop), data = train_data) : Model has more coefficients than data
-
-#FIXME: More data are necessary to work with total values, can we apply smoothing, creating data each 3 months? We need this to predict wind, solar and hydro electricity production, so consequently also gdp and pop. This problem occurs only for electricity data, since they begin in 2004, while for the following models there should not be this problem.
-#Using all the countries brings to ugly plots in conformal predictions, so we worked with total EU values
 ```
 
 Plot predictions 2020-2030:
 
 ```{r}
-plot(seq(2005,2019,0.5), use_wind_elec.diff.total, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Prediction - Wind Electricity Use',ylim=c(0,100000))
+plot(seq(2005,2019,0.5), use_wind_elec.diff.total.s, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Prediction - Wind Diff Electricity Use',ylim=c(0,100000))
 
 preds_wind=as.numeric(predict(model_gam_wind,newdata=vec_test_wind))
 lines(seq(2005,2019,0.5),model_gam_wind$fitted.values,lwd=2,col="green",lty=1)
 lines(seq(2020,2030,0.5),preds_wind,lwd=2,col="green",lty=2)
 
+```
+
+```{r}
+plot(seq(2005,2019,0.5), use_hydro_elec.diff.total.s, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Prediction - Hydro Diff Electricity Use',ylim=c(0,12000))
+
+preds_hydro=as.numeric(predict(model_gam_hydro,newdata=vec_test_hydro))
+lines(seq(2005,2019,0.5),model_gam_hydro$fitted.values,lwd=2,col="green",lty=1)
+lines(seq(2020,2030,0.5),preds_hydro,lwd=2,col="green",lty=2)
+```
+
+```{r}
+plot(seq(2005,2019,0.5), use_solar_elec.diff.total.s, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Prediction - Solar Diff Electricity Use',ylim=c(-50000,50000))
+
+preds_solar=as.numeric(predict(model_gam_solar,newdata=vec_test_solar))
+lines(seq(2005,2019,0.5),model_gam_solar$fitted.values,lwd=2,col="green",lty=1)
+lines(seq(2020,2030,0.5),preds_solar,lwd=2,col="green",lty=2)
 ```
 
 
@@ -3619,7 +3855,7 @@ lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
 ```
 
 
-## Predicted decrease
+### Predicted decrease
 How much is the predicted decrease?
 ```{r}
 ghg.gam.preds <- predict(ghg.gam, newdata=vec_ghg_pred.diff.s, se=T)
