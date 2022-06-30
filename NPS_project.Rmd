@@ -3335,14 +3335,17 @@ qqnorm(consump.renew.gam$residuals)
 shapiro.test(consump.renew.gam$residuals)
 ```
 
+
 ```{r}
 Acf(consump.renew.gam$residuals)
 ```
 
 
+
 ```{r}
 Pacf(consump.renew.gam$residuals)
 ```
+
 
 
 ### Predictions for 2020-2030
@@ -3371,6 +3374,9 @@ colnames(vec_re_pred) <- c("value_oil", "value_ff", "value_ng")
 consump.renew.gam.preds <- predict(consump.renew.gam, newdata=vec_re_pred, se=T)
 ```
 
+
+
+
 ```{r}
 # See graphs
 with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Renewable Energy Consumption'))
@@ -3379,6 +3385,9 @@ lines(seq(1991,2019,1/3),consump.renew.gam$fitted.values,col="blue",lwd=1)
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),lwd=1,lty=2,col =" darkgrey ")
 
 ```
+
+
+
 ```{r}
 renew.predictions=data.frame(t(consump.renew.gam.preds$fit))
 colnames(renew.predictions)=seq(2020,2030,1/3)
@@ -3386,27 +3395,13 @@ renew.predictions=renew.predictions[1,as.character(seq(2020,2030))]
 ```
 
 ```{r}
-renew.predictions.total=consump.renew.europe[,30]+cumsum(as.numeric(renew.predictions))
+(renew.predictions.total=consump.renew.europe[,30]+cumsum(as.numeric(renew.predictions)))
 ```
 
 
 ## DIFF_TOTAL_GHG ~  DIFF_TOTAL_RENEWABLE CONSUMPTION
 
-```{r}
-c02 <- read.xlsx("data/annual-co-emissions-by-region.xlsx", sheet=2)
 
-# Check if all countries are present in other EU stats 
-sum(!(unique(c02$Country) %in% rownames(gdp))) > 0
-sum(!( rownames(gdp) %in% unique(c02$Country))) > 0
-```
-Import EU dataframe
-```{r}
-#Co2=read.xlsx("data/owid-co2-data.xlsx",sheet=2,colNames=F)
-#Co2=data.frame(Co2[,3])
-#rownames(Co2)=years_90_19
-#colnames(Co2)="ValueCo2"
-#head(Co2)
-```
 
 ```{r}
 ghg=read.xlsx("data/ghg_emissions.xlsx", sheet=3, colNames=F)
@@ -3429,7 +3424,7 @@ head(ghg)
 
 
 ```{r}
-plot(years_90_19,ghg$ValueGhg)
+plot(years_90_19,ghg$ValueGhg,xlab="Years",ylab="Percentage emissions",main="Percentage of Ghg emissions wrt 1990")
 ```
 
 
@@ -3439,7 +3434,7 @@ ghg.diff=data.frame(diff_ghg=diff(ghg$ValueGhg))
 ```
 
 ```{r}
-plot(seq(1991,2019),ghg.diff$diff_ghg)
+plot(seq(1991,2019),ghg.diff$diff_ghg,xlab="Years",ylab="Percentage emissions",main="Variations of percentage of Ghg emissions wrt 1990")
 ```
 
 
@@ -3599,7 +3594,7 @@ Pacf(ghg.gam$residuals)
 
 ```{r}
 #simple baseline model
-ghg.gam.b <- gam(value_ghg ~ s(value_re,bs='cr'), data=vec_ghg)
+ghg.gam.b <- gam(value_ghg ~ s(value_re,bs='cr'), data=vec_ghg.diff)
 
 summary(ghg.gam.b)
 
@@ -3615,27 +3610,14 @@ Pacf(ghg.gam.b$residuals)
 
 ```{r}
 #predictions with simple model
-ghg.gam.preds.b <- predict(ghg.gam.b, newdata=vec_ghg_pred, se=T)
+ghg.gam.preds.b <- predict(ghg.gam.b, newdata=vec_ghg_pred.diff, se=T)
 
-with(vec_ghg, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
+with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
 points(seq(2020,2030),ghg.gam.preds.b$fit ,cex=0.5, col ="red")
 lines(seq(1991,2019),ghg.gam.b$fitted.values,lwd=1,col="blue")
-```
-We should increase the level of significance to 6.6% in order to not reject this model.
-So we also try to remove the smooth term
-
-```{r}
-#linear model
-ghg.gam.linear <- gam(value_ghg ~ value_re, data=vec_ghg)
-
-summary(ghg.gam.linear)
-
-hist(ghg.gam.linear$residuals)
-qqnorm(ghg.gam.linear$residuals)
-shapiro.test(ghg.gam.linear$residuals)
+lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
 ```
 
-Same situation so we stick with the previous model
 
 ## Predicted decrease
 How much is the predicted decrease?
@@ -3662,6 +3644,16 @@ Percentage_decrease
 ```
 
 ```{r}
+#with baseline model
+deltas.b=as.numeric(ghg.gam.preds.b$fit)
+Percentage_emissions.b=ghg[30,1]+cumsum(deltas.b)
+Percentage_decrease.b=as.numeric(100-Percentage_emissions.b[11])
+
+Percentage_emissions.b
+Percentage_decrease.b
+```
+
+```{r}
 with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
 points(seq(2020,2030),Percentage_emissions,cex=.5,col="green")
 lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
@@ -3669,6 +3661,15 @@ lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
 
 
 A cut of 48.23% is expected with the actual rhythm, so more effort is needed in order to comply with the Green Deal objective!
+
+
+```{r}
+#with baseline model
+with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
+points(seq(2020,2030),Percentage_emissions.b,cex=.5,col="green")
+lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
+```
+
 
 Let's also compute the conformal prediction intervals
 ```{r}
@@ -3725,6 +3726,61 @@ lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
 lines(seq(2020,2030),lo_perc,col="green",lty=2)
 lines(seq(2020,2030),up_perc,col="green",lty=2)
 
+```
+
+
+```{r}
+#with baseline model
+
+train_gam_ghg.b <- function(x,y,out=NULL){
+    colnames(x)=c("value_re")
+    train_data=data.frame(y,x)
+    
+    model_gam= gam(y ~ s(value_re,bs='cr'), 
+    data = train_data)
+}
+
+
+predict_gam_ghg.b <- function(obj, new_x){
+    new_x=data.frame(new_x)
+    colnames(new_x)=c("value_re")
+    as.numeric(predict(obj,new_x))
+}
+
+c_preds.ghg.b <- conformal.pred(
+    vec_ghg.diff[,2], 
+    vec_ghg.diff[,1],
+    as.matrix(c(vec_ghg.diff[,2],vec_ghg_pred.diff[,1])),
+    alpha=0.05, 
+    verbose=T, 
+    train.fun = train_gam_ghg.b, 
+    predict.fun = predict_gam_ghg.b)
+```
+
+```{r}
+plot(seq(1991,2019), vec_ghg.diff$value_ghg, xlim=range(c(1990,2030)),cex =.5,xlab="Year",ylab="Diff percentage",col =" darkgrey ",main='GAM conformal prediction - Ghg percentage variations',ylim=c(-10,10))
+
+lines(seq(1991,2030),c_preds.ghg.b$pred,lwd =2, col ="green",lty=3)
+lines(seq(1991,2030),c_preds.ghg.b$up,lwd =1, col =" blue",lty =3)
+lines(seq(1991,2030),c_preds.ghg.b$lo, lwd =1, col =" blue",lty =3)
+lines(seq(1991,2019),c_preds.ghg.b$fit, lwd =1, col =" green",lty =1)
+```
+
+
+```{r}
+lo_perc.b=ghg[30,1]+cumsum(c_preds.ghg.b$lo[30:40])
+up_perc.b=ghg[30,1]+cumsum(c_preds.ghg.b$up[30:40])
+for (i in 1:11){
+  lo_perc.b[i]=max(0,lo_perc.b[i])
+  up_perc.b[i]=min(100,up_perc.b[i])
+
+}
+
+with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(0,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
+points(seq(2020,2030),Percentage_emissions.b,cex=.5,col="green")
+lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
+lines(seq(2020,2030),lo_perc.b,col="green",lty=2)
+lines(seq(2020,2030),up_perc.b,col="green",lty=2)
 ```
 
 # Robustness
