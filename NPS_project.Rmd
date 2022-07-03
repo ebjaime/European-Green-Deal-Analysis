@@ -922,9 +922,9 @@ pvalue
 ```
 
 
-### Conformal prediction on types of RE for electricity production 
+### Regression on types of RE for electricity production 
 
-To understand how Hydro, Wind and Solar sources of electricity will grow with time we proceeded with some prediction of the amount of electricity coming from each of them, in function of Gdp, population and their interaction. 
+To understand how Hydro, Wind and Solar sources of electricity are growing with time we proceeded with some regression of the amount of electricity coming from each of them, in function of Gdp, population and their interaction. 
     
 For this purpose, we will first have to import the SSP data from our dataset, which was obtained by retrieving the year to year values from the original data (more details in "src/preprocessing_SSP.Rmd").
 
@@ -963,7 +963,7 @@ gdp.diff[is.na(gdp.diff)] <- 0
 ```
 
 EU totals - original data
-For the moment we are trying to make predictions for the three renewable electricity sources with original data
+For the moment we are trying to make regression for the three renewable electricity sources with original data
 ```{r}
 # Not in SSP GDP data and in electricity data
 discard.idx <- rownames(use_solar_elec[-c(1,2,3),])%in%rownames(gdp)
@@ -996,7 +996,7 @@ Montenegro and Albania should be discarded as they have NaN values or no informa
 
 
 
-Since we have data only from 2004 (instead of 1990) to 2019, more points are needed to construct predicting models. We generate these points through a smoothing procedure, obtaining semestral data.
+Since we have data only from 2004 (instead of 1990) to 2019, more points are needed to construct regression models. We generate these points through a smoothing procedure, obtaining semestral data.
 
 
 Smoothing for solar, wind and hydro to obtain data for each semester (total values)
@@ -1014,11 +1014,6 @@ gdp.elec.train <- gdp[,as.character(seq(2004,2019))]
 pop.elec.train <- pop[,as.character(seq(2004,2019))]
 gdp.elec.train = colSums(gdp.elec.train)
 pop.elec.train = colSums(pop.elec.train)
-
-gdp.elec.pred  <- gdp[,as.character(seq(2020,2030))]
-pop.elec.pred  <- pop[,as.character(seq(2020,2030))]
-gdp.elec.pred = colSums(gdp.elec.pred)
-pop.elec.pred = colSums(pop.elec.pred)
 ```
 
 
@@ -1028,8 +1023,6 @@ Smoothing on Gdp and Population (total values)
 gdp.elec.train.s <- smoothing_procedure(t(data.frame(gdp.elec.train)), 2004, 2019, interval=2)
 pop.elec.train.s <- smoothing_procedure(t(data.frame(pop.elec.train)), 2004, 2019, interval=2)
 
-gdp.elec.pred.s <- smoothing_procedure(t(data.frame(gdp.elec.pred)), 2020, 2030, interval=2)
-pop.elec.pred.s <- smoothing_procedure(t(data.frame(pop.elec.pred)), 2020, 2030, interval=2)
 
 ```
 
@@ -1040,9 +1033,6 @@ vec_train = cbind(as.numeric(gdp.elec.train.s), as.numeric(pop.elec.train.s))
 vec_train=data.frame(vec_train)
 colnames(vec_train)=c("gdp","pop")
 
-vec_test = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
-vec_test=data.frame(vec_test)
-colnames(vec_test)=c("gdp","pop")
 
 vec_train
 ```
@@ -1116,6 +1106,7 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -1143,6 +1134,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -1168,6 +1161,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -1260,7 +1255,7 @@ Pacf(model_gam$residuals)
 
 Differences are much needed...
 
-Since working with original data gave us residuals with high correlations, we decided to fit models using the year to year variations. We construct some GAM models on which we perform conformal prediction.
+Since working with original data gave us residuals with high correlations, we decided to fit models using the year to year variations. We explot again GAM models to realize our regression task.
 Each time we search for the best GAM model by looking at the significance of the covariates and the adjusted R squared.
 
 #### First order differences dataframes
@@ -1295,7 +1290,7 @@ use_hydro_elec.diff.c <- use_hydro_elec.diff.c[rn,]
 ```
 
 
-Smoothing for solar, wind and hydro to obtain data for each month (variations)
+Smoothing for solar, wind and hydro to obtain semestral data (variations)
 ```{r}
 use_solar_elec.diff.s <- smoothing_procedure(use_solar_elec.diff.c, 2005, 2019, interval=2, row_names = rownames(use_solar_elec.diff.c))
 use_wind_elec.diff.s <- smoothing_procedure(use_wind_elec.diff.c, 2005, 2019, interval=2, row_names = rownames(use_wind_elec.diff.c))
@@ -1307,9 +1302,13 @@ use_hydro_elec.diff.s <- smoothing_procedure(use_hydro_elec.diff.c, 2005, 2019, 
 gdp.diff.total=t(data.frame(colSums(gdp.diff)))
 pop.diff.total=t(data.frame(colSums(pop.diff)))
 
-use_solar_elec.diff.total=t(data.frame(colSums(use_solar_elec.diff.s)))
-use_wind_elec.diff.total=t(data.frame(colSums(use_wind_elec.diff.s)))
-use_hydro_elec.diff.total=t(data.frame(colSums(use_hydro_elec.diff.s)))
+use_solar_elec.diff.total=t(data.frame(colSums(use_solar_elec.diff.c)))
+use_wind_elec.diff.total=t(data.frame(colSums(use_wind_elec.diff.c)))
+use_hydro_elec.diff.total=t(data.frame(colSums(use_hydro_elec.diff.c)))
+
+use_solar_elec.diff.total.s=t(data.frame(colSums(use_solar_elec.diff.s)))
+use_wind_elec.diff.total.s=t(data.frame(colSums(use_wind_elec.diff.s)))
+use_hydro_elec.diff.total.s=t(data.frame(colSums(use_hydro_elec.diff.s)))
 
 ```
 
@@ -1318,30 +1317,20 @@ use_hydro_elec.diff.total=t(data.frame(colSums(use_hydro_elec.diff.s)))
 #using EU yearly variations
 gdp.elec.diff.train <- gdp.diff.total[,as.character(seq(2005,2019))]
 pop.elec.diff.train <- pop.diff.total[,as.character(seq(2005,2019))]
-
-gdp.elec.diff.pred  <- gdp.diff.total[,as.character(seq(2020,2030))]
-pop.elec.diff.pred  <- pop.diff.total[,as.character(seq(2020,2030))]
 ```
 
 ```{r}
 gdp.elec.diff.train.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.train)), 2005, 2019, interval=2)
 pop.elec.diff.train.s <- smoothing_procedure(t(data.frame(pop.elec.diff.train)), 2005, 2019, interval=2)
 
-gdp.elec.diff.pred.s <- smoothing_procedure(t(data.frame(gdp.elec.diff.pred)), 2020, 2030, interval=2)
-pop.elec.diff.pred.s <- smoothing_procedure(t(data.frame(pop.elec.diff.pred)), 2020, 2030, interval=2)
-
 ```
 
-
+Continue revision from here
 ```{r}
 #vectors for EU yearly variations
 vec_train = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
 vec_train=data.frame(vec_train)
 colnames(vec_train)=c("gdp","pop")
-
-vec_test = cbind(as.numeric(gdp.elec.diff.pred.s), as.numeric(pop.elec.diff.pred.s))
-vec_test=data.frame(vec_test)
-colnames(vec_test)=c("gdp","pop")
 
 vec_train
 ```
@@ -1373,7 +1362,7 @@ model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_d
 
 anova(model_gam_reduced,model_gam,test="F")
 ```
-Let's put back the interraction term and quit gdp
+Let's put back the interaction term and quit gdp
 
 ```{r}
 model_gam_reduced=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
@@ -1709,10 +1698,6 @@ vec_train = cbind(as.numeric(gdp.elec.train.s[,3:31]), as.numeric(pop.elec.train
 vec_train=data.frame(vec_train)
 colnames(vec_train)=c("gdp","pop")
 
-vec_test = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
-vec_test=data.frame(vec_test)
-colnames(vec_test)=c("gdp","pop")
-
 vec_train
 ```
 
@@ -1776,10 +1761,6 @@ vec_train = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.tr
 vec_train=data.frame(vec_train)
 colnames(vec_train)=c("gdp","pop")
 
-vec_test = cbind(as.numeric(gdp.elec.diff.pred.s), as.numeric(pop.elec.diff.pred.s))
-vec_test=data.frame(vec_test)
-colnames(vec_test)=c("gdp","pop")
-
 vec_train
 ```
 
@@ -1818,6 +1799,7 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -1855,6 +1837,7 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -1921,8 +1904,6 @@ So we cannot reduce the degree of gdp spline to degree 2
 Let's try to lower the degree of the interaction term
 
 
-
-
 ```{r}
 model_gam_reduced=lm(European_Union ~ bs(gdp) + pop+ bs(I(gdp*pop),degree=2),data=tr_data)
 
@@ -1941,6 +1922,7 @@ Acf(model_gam2$residuals)
 ```{r}
 Pacf(model_gam2$residuals)
 ```
+
 High correlation in 1 step residuals but we stick with this model
 ```{r}
 model_gam_solar=model_gam2
@@ -1957,6 +1939,8 @@ summary(model_gam_hydro)
 
 ```
 
+
+
 ```{r}
 summary(model_gam_solar)
 
@@ -1964,225 +1948,95 @@ summary(model_gam_solar)
 
 
 
-### Predictions
+### Plots
 
-```{r}
-train_gam_wind <- function(x,y,out=NULL){
-    colnames(x)=c("gdp", "pop")
-    train_data=data.frame(y,x)
-    model_gam=lm(y ~ bs(gdp) + pop + bs(I(gdp * pop)), 
-    data = train_data)
-}
-
-
-predict_gam_wind <- function(obj, new_x){
-    new_x=data.frame(new_x)
-    colnames(new_x)=c("gdp", "pop")
-    as.numeric(predict(obj,new_x))
-}
-
-lm_train_wind=lm.funs(intercept = T)$train.fun
-lm_predict_wind=lm.funs(intercept = T)$predict.fun
-
-```
+Wind regression
 
 ```{r}
 vec_train_wind = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
 vec_train_wind=data.frame(vec_train_wind)
 colnames(vec_train_wind)=c("gdp","pop")
 
+gdp.grid=with(vec_train_wind,seq(min(gdp),max(gdp),length.out=100))
+pop.grid=with(vec_train_wind,seq(min(pop),max(pop),length.out=100))
+grid.wind=expand.grid(gdp.grid,pop.grid)
+names(grid.wind)=c('gdp','pop')
 
-vec_test_wind = cbind(as.numeric(gdp.elec.diff.pred.s), as.numeric(pop.elec.diff.pred.s))
-vec_test_wind=data.frame(vec_test_wind)
-colnames(vec_test_wind)=c("gdp","pop")
 
-design_matrix_gdp=bs(vec_train_wind$gdp)
-design_matrix_pop=bs(vec_train_wind$pop,degree=1)
-design_matrix_int=bs(I(vec_train_wind$gdp * vec_train_wind$pop))
-design_matrix_wind=matrix(cbind(design_matrix_gdp,design_matrix_pop,design_matrix_int),nrow=dim(vec_train_wind)[1])
-
-pred_grid_gdp=bs(vec_test_wind$gdp)
-pred_grid_pop=bs(vec_test_wind$pop,degree=1)
-pred_grid_int=bs(I(vec_test_wind$gdp*vec_test_wind$pop))
-
-pred_grid_wind=matrix(cbind(pred_grid_gdp,pred_grid_pop,pred_grid_int),nrow=dim(vec_test_wind)[1])
-
+preds_wind=predict(model_gam_wind,newdata=grid.wind)
+persp3d(gdp.grid,pop.grid,preds_wind,col='green',border="white",lwd=0.1,xlab="gdp",ylab="pop",alpha=0.5)
+with(vec_train_wind, points3d(gdp,pop,use_wind_elec.diff.total.s,col='black',size=10))
 ```
 
+
+
+Yearly wind evolution
 ```{r}
-train_gam_hydro <- function(x,y,out=NULL){
-    colnames(x)=c("gdp", "pop")
-    train_data=data.frame(y,x)
-    model_gam=gam(y ~ s(gdp, bs = "cr") + s(pop, bs = "cr") + s(I(gdp*pop), bs = "cr"), data=train_data)
-}
+plot(seq(2005,2019,0.5), use_wind_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Wind Diff Electricity Use')
 
+lines(seq(2005,2019,0.5),model_gam_wind$fitted.values,lwd=2,col="green",lty=1)
 
-predict_gam_hydro <- function(obj, new_x){
-    new_x=data.frame(new_x)
-    colnames(new_x)=c("gdp", "pop")
-    predict.gam(obj,new_x)
-}
 ```
 
+Hydro regression
 ```{r}
 vec_train_hydro = cbind(as.numeric(gdp.elec.train.s[,3:31]), as.numeric(pop.elec.train.s[,3:31]))
 vec_train_hydro=data.frame(vec_train_hydro)
 colnames(vec_train_hydro)=c("gdp","pop")
 
-vec_test_hydro = cbind(as.numeric(gdp.elec.pred.s), as.numeric(pop.elec.pred.s))
-vec_test_hydro=data.frame(vec_test_hydro)
-colnames(vec_test_hydro)=c("gdp","pop")
+gdp.grid=with(vec_train_hydro,seq(min(gdp),max(gdp),length.out=100))
+pop.grid=with(vec_train_hydro,seq(min(pop),max(pop),length.out=100))
+grid.hydro=expand.grid(gdp.grid,pop.grid)
+names(grid.hydro)=c('gdp','pop')
+
+
+preds_hydro=predict(model_gam_hydro,newdata=grid.hydro)
+persp3d(gdp.grid,pop.grid,preds_hydro,col='cyan1',border="black",lwd=0.3,xlab="gdp",ylab="pop",alpha=0.5)
+with(vec_train_hydro, points3d(gdp,pop,use_hydro_elec.diff.total.s,col='black',size=10))
 ```
 
+Hydro yearly evolution
 ```{r}
-train_gam_solar <- function(x,y,out=NULL){
-    colnames(x)=c("gdp", "pop")
-    train_data=data.frame(y,x)
-    model_gam=lm(y ~ bs(gdp) + pop + bs(I(gdp*pop)), data=train_data)
-}
+plot(seq(2005,2019,0.5), use_hydro_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Hydro Diff Electricity Use')
 
-
-predict_gam_solar <- function(obj, new_x){
-    new_x=data.frame(new_x)
-    colnames(new_x)=c("gdp", "pop")
-    as.numeric(predict(obj,new_x))
-}
+lines(seq(2005,2019,0.5),model_gam_hydro$fitted.values,lwd=2,col="cyan1",lty=1)
 ```
 
+Solar regression
 ```{r}
 vec_train_solar = cbind(as.numeric(gdp.elec.diff.train.s), as.numeric(pop.elec.diff.train.s))
 vec_train_solar=data.frame(vec_train_solar)
 colnames(vec_train_solar)=c("gdp","pop")
 
-vec_test_solar = cbind(as.numeric(gdp.elec.diff.pred.s), as.numeric(pop.elec.diff.pred.s))
-vec_test_solar=data.frame(vec_test_solar)
-colnames(vec_test_solar)=c("gdp","pop")
+gdp.grid=with(vec_train_solar,seq(min(gdp),max(gdp),length.out=100))
+pop.grid=with(vec_train_solar,seq(min(pop),max(pop),length.out=100))
+grid.solar=expand.grid(gdp.grid,pop.grid)
+names(grid.solar)=c('gdp','pop')
+
+
+preds_solar=predict(model_gam_solar,newdata=grid.solar)
+persp3d(gdp.grid,pop.grid,preds_solar,col='darkorange',border="black",lwd=0.3,xlab="gdp",ylab="pop",alpha=0.5)
+with(vec_train_solar, points3d(gdp,pop,use_solar_elec.diff.total.s,col='black',size=10))
 ```
 
+Solar yearly evolution
+```{r}
+plot(seq(2005,2019,0.5), use_solar_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Solar Diff Electricity Use')
+
+lines(seq(2005,2019,0.5),model_gam_solar$fitted.values,lwd=2,col="darkorange",lty=1)
+```
+
+
+Let's see them altogether in one plot
 
 ```{r}
-#Eu total predictions
-c_preds.wind.total <- conformal.pred(
-    #design_matrix_wind,
-    as.matrix(vec_train_wind), 
-    use_wind_elec.diff.total,
-    as.matrix(rbind(vec_train_wind,vec_test_wind)),
-    alpha=0.05, 
-    verbose=T, 
-    train.fun = train_gam_wind, 
-    predict.fun = predict_gam_wind)
-
-c_preds.hydro.total <- conformal.pred(
-    as.matrix(vec_train_hydro), 
-    use_hydro_elec.diff.total,
-    as.matrix(rbind(vec_train_hydro,vec_test_hydro)),
-    alpha=0.05, 
-    verbose=T, 
-    train.fun = train_gam_hydro, 
-    predict.fun = predict_gam_hydro)
-
-c_preds.solar.total <- conformal.pred(
-    as.matrix(vec_train_solar), 
-    use_solar_elec.diff.total,
-    as.matrix(rbind(vec_train_solar,vec_test_solar)),
-    alpha=0.05, 
-    verbose=T, 
-    train.fun = train_gam_solar, 
-    predict.fun = predict_gam_solar)
+matplot(seq(2005,2019,0.5),model_gam_wind$fitted.values,type='l',lwd=2,col="green",main="Variations of electricity production coming from renewable sources",ylim=c(-500,40000),xlab="Years",ylab="Terajoules")
+lines(seq(2005,2019,0.5),model_gam_hydro$fitted.values,lwd=2,col="cyan1",lty=1)
+lines(seq(2005,2019,0.5),model_gam_solar$fitted.values,lwd=2,col="darkorange",lty=1)
+legend("topleft",legend=c("Wind","Hydro","Solar"),col=c("green","blue","darkorange"),pch=1)
 ```
 
-Plot predictions 2020-2030:
-
-```{r}
-plot(seq(2005,2019,0.5), use_wind_elec.diff.total.s, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Prediction - Wind Diff Electricity Use',ylim=c(0,100000))
-
-preds_wind=as.numeric(predict(model_gam_wind,newdata=vec_test_wind))
-lines(seq(2005,2019,0.5),model_gam_wind$fitted.values,lwd=2,col="green",lty=1)
-lines(seq(2020,2030,0.5),preds_wind,lwd=2,col="green",lty=2)
-
-```
-
-```{r}
-plot(seq(2005,2019,0.5), use_hydro_elec.diff.total.s, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Prediction - Hydro Diff Electricity Use',ylim=c(0,12000))
-
-preds_hydro=as.numeric(predict(model_gam_hydro,newdata=vec_test_hydro))
-lines(seq(2005,2019,0.5),model_gam_hydro$fitted.values,lwd=2,col="green",lty=1)
-lines(seq(2020,2030,0.5),preds_hydro,lwd=2,col="green",lty=2)
-```
-
-```{r}
-plot(seq(2005,2019,0.5), use_solar_elec.diff.total.s, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Prediction - Solar Diff Electricity Use',ylim=c(-50000,50000))
-
-preds_solar=as.numeric(predict(model_gam_solar,newdata=vec_test_solar))
-lines(seq(2005,2019,0.5),model_gam_solar$fitted.values,lwd=2,col="green",lty=1)
-lines(seq(2020,2030,0.5),preds_solar,lwd=2,col="green",lty=2)
-```
-
-
-```{r}
-plot(seq(2005,2019,0.5), use_wind_elec.diff.total, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(-50000,100000))
-
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.wind.total$pred,lwd =2, col ="green",lty=3)
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.wind.total$up,lwd =1, col =" blue",lty =3)
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.wind.total$lo, lwd =1, col =" blue",lty =3)
-lines(seq(2005,2019,0.5),c_preds.wind.total$fit, lwd =1, col =" green",lty =1)
-
-```
-
-```{r}
-plot(seq(2005,2019,0.5), use_hydro_elec.diff.total, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use',ylim=c(-10000,10000))
-
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.hydro.total$pred,lwd =2, col ="green",lty=3)
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.hydro.total$up,lwd =1, col =" blue",lty =3)
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.hydro.total$lo, lwd =1, col =" blue",lty =3)
-lines(seq(2005,2019,0.5),c_preds.hydro.total$fit, lwd =1, col =" green",lty =1)
-
-
-```
-
-```{r}
-plot(seq(2005,2019,0.5), use_solar_elec.diff.total, xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Solar Electricity Use',ylim=c(-60000,40000))
-
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.solar.total$pred,lwd =2, col ="green",lty=3)
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.solar.total$up,lwd =1, col =" blue",lty =3)
-lines(c(seq(2005,2019,0.5),seq(2020,2030,0.5)),c_preds.solar.total$lo, lwd =1, col =" blue",lty =3)
-lines(seq(2005,2019,0.5),c_preds.solar.total$fit, lwd =1, col =" green",lty =1)
-
-
-```
-```{r}
-wind.predictions=use_wind_elec.total[,16]+cumsum(c_preds.wind.total$pred)
-wind.predictions.up=use_wind_elec.total[,16]+cumsum(c_preds.wind.total$up)
-wind.predictions.low=use_wind_elec.total[,16]+cumsum(c_preds.wind.total$lo)
-
-plot(seq(2004,2019),use_wind_elec.total,xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Wind Electricity Use',ylim=c(min(use_wind_elec.total-1000),max(wind.predictions.up+1000)))
-points(seq(2020,2030,0.5),wind.predictions,col="green",cex=0.5)
-lines(seq(2020,2030,0.5),wind.predictions.up,col="blue",lwd=1,lty=3)
-lines(seq(2020,2030,0.5),wind.predictions.low,col="blue",lwd=1,lty=3)
-
-```
-
-```{r}
-hydro.predictions=use_hydro_elec.total[,16]+cumsum(c_preds.hydro.total$pred)
-hydro.predictions.up=use_hydro_elec.total[,16]+cumsum(c_preds.hydro.total$up)
-hydro.predictions.low=use_hydro_elec.total[,16]+cumsum(c_preds.hydro.total$lo)
-
-plot(seq(2004,2019),use_hydro_elec.total,xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Hydro Electricity Use',ylim=c(min(hydro.predictions.low-1000),max(hydro.predictions.up+1000)))
-points(seq(2020,2030,0.5),hydro.predictions,col="green",cex=0.5)
-lines(seq(2020,2030,0.5),hydro.predictions.up,col="blue",lwd=1,lty=3)
-lines(seq(2020,2030,0.5),hydro.predictions.low,col="blue",lwd=1,lty=3)
-
-```
-```{r}
-solar.predictions=use_solar_elec.total[,16]+cumsum(c_preds.solar.total$pred)
-solar.predictions.up=use_solar_elec.total[,16]+cumsum(c_preds.solar.total$up)
-solar.predictions.low=use_solar_elec.total[,16]+cumsum(c_preds.solar.total$lo)
-
-plot(seq(2004,2019),use_solar_elec.total,xlim=range(c(2005,2030)),cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='GAM conformal prediction - Solar Electricity Use',ylim=c(min(solar.predictions.low-1000),max(solar.predictions.up+1000)))
-points(seq(2020,2030,0.5),solar.predictions,col="green",cex=0.5)
-lines(seq(2020,2030,0.5),solar.predictions.up,col="blue",lwd=1,lty=3)
-lines(seq(2020,2030,0.5),solar.predictions.low,col="blue",lwd=1,lty=3)
-```
+We can clearly see that the electricity production coming from renewable sources is effectively growing and in particular wind is the one that is developing more than the others.
 
 
 ## Third Target: Analyse the current European renewable energy network.
@@ -2202,6 +2056,12 @@ matplot(colnames(prod.by.fuel.comb.p),t(prod.by.fuel.comb.p[4:38,]),type='l',xla
 ```{r}
 prod.by.fuel.renew.countries=prod.by.fuel.renew[-c(1,2,3),]
 matplot(colnames(prod.by.fuel.renew.countries),t(prod.by.fuel.renew.countries),type='l',xlab="Year",ylab="Megawatt",main="Electricity capacities from renewables")
+```
+
+Which country is generating more power from renewables?
+```{r}
+idx_max=which.max(prod.by.fuel.renew.countries[,30])
+rownames(prod.by.fuel.renew.countries)[idx_max]
 ```
 
 Now let's perform different kinds of nonparametric regression to compare European trends of renewable vs non renewable electricity capacity
@@ -2313,7 +2173,7 @@ matlines (anni ,se.bands ,lwd =1, col =" green",lty =3)
 legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
 ```
 
-Let's try with spline regression
+Let's try with quadratic spline regression
 ```{r}
 #combustible fuels
 b=data.frame(cap=as.numeric(prod.by.fuel.comb.p[2,]),years_b=years_90_19)
@@ -2377,11 +2237,11 @@ Natural cubic splines seems the best approach, it better captures all the local 
 
 ### ANOVA test on 2019 capacities, dividing Europe in four regions
 
-Set a region-based analysis of electricity capacity
+Now we set a region-based analysis of electricity capacity
 
 ```{r}
 
-countries=rownames(prod.by.fuel.renew.countries)# TODO: recompute this dataset, it's the sum of the capacities coming from different sources in prod.by.fuel dataset (discard combustible fuels and nuclear)
+countries=rownames(prod.by.fuel.renew.countries)
 
 north_europe=c("Denmark","Estonia","Latvia","Lithuania","Finland","Sweden","Norway","Iceland","United Kingdom","Ireland")
 
@@ -2389,10 +2249,11 @@ east_europe=c("Bulgaria","Czechia","Hungary","Poland","Romania","Slovakia","Turk
 
 south_europe=c("Greece","Spain","Italy","Cyprus","Malta","Portugal","Croatia","Slovenia","North Macedonia","Albania","Serbia")
 
-central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria") #TODO: change Germany name
+central_europe=c("France","Belgium","Germany (until 1990 former territory of the FRG)","Luxembourg","Netherlands","Austria")
 
 length(countries)==length(c(north_europe,south_europe,east_europe,central_europe))  #just to see correct division
 ```
+
 Let's build the dataframe with groups attached, to perform an anova test on 2019 capacities
 ```{r}
 north=prod.by.fuel.renew.countries[match(north_europe,countries),30]
@@ -2426,6 +2287,7 @@ T0 <- summary(fit)[[1]][1,4]
 B=10000
 T_stat <- numeric(B) 
 n <- dim(aov_no_nuclear)[1]
+set.seed(seed)
 
 for(perm in 1:B){
   # Permutation:
@@ -2449,10 +2311,11 @@ abline(v=T0,col=3,lwd=4)
 p_val <- sum(T_stat>=T0)/B
 p_val
 ```
+
 With aovp?
 ```{r}
 library(lmPerm)
-lmp=aovp(cap_19 ~ Region,perm="Prob",Cp=1e-6)#cp is supposed to stop iterations when standard error is at that level...
+lmp=aovp(cap_19 ~ Region,perm="Prob",Cp=1e-6) 
 summary(lmp)
 detach(aov_no_nuclear)
 #pretty much same result
@@ -2493,7 +2356,7 @@ T0 <- summary(fit)[[1]][1,4]
 
 T_stat <- numeric(B) 
 n <- dim(aov_ratio_cap)[1]
-
+set.seed(seed)
 for(perm in 1:B){
   # Permutation:
   permutation <- sample(1:n)
@@ -2517,6 +2380,7 @@ p_val <- sum(T_stat>=T0)/B
 p_val
 detach(aov_ratio_cap)
 ```
+
 Still no statistical evidence of different development in different regions
 
 # Core: Model to predict future european GHG emissions
@@ -2579,10 +2443,10 @@ Includes three models, one for each non-renewable energy:
     - EU_NATURAL GAS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
 
 ```{r}
-gdp.train <- gdp.total[1:30] #from 1990 until 2019
+gdp.train <- gdp.total[1:30] #from 1990 to 2019
 pop.train <- pop.total[1:30]
 
-gdp.pred <- gdp.total[31:41]
+gdp.pred <- gdp.total[31:41] #from 2020 to 2030
 pop.pred <- pop.total[31:41]
 ```
 
@@ -2648,6 +2512,10 @@ qqnorm(consump.oil.petr.gam$residuals)
 shapiro.test(consump.oil.petr.gam$residuals)
 ```
 
+```{r}
+Acf(consump.oil.petr.gam$residuals)
+```
+
 
 ```{r}
 Pacf(consump.oil.petr.gam$residuals)
@@ -2671,6 +2539,9 @@ qqnorm(consump.fossils.gam$residuals)
 shapiro.test(consump.fossils.gam$residuals)
 ```
 
+```{r}
+Acf(consump.fossils.gam$residuals)
+```
 
 ```{r}
 Pacf( 
@@ -2696,7 +2567,12 @@ qqnorm(consump.gas.gam$residuals)
 shapiro.test(consump.gas.gam$residuals)
 
 ```
-Let's try to quit the interaction (residuals are gaussian)
+
+Let's try to quit the interaction (residuals are gaussian, but simple anova doesn't work)
+```{r}
+gas_reduced=gam(gas_eu ~ s(pop_eu,bs='cr') + s(gdp_eu,bs='cr'),data=vec_gas)
+anova(gas_reduced,consump.gas.gam,test="F")
+```
 
 ```{r}
 T0 <- summary.aov(aov(gam(gas_eu ~ s(gdp_eu,bs='cr') + s(pop_eu,bs='cr') + s(I(gdp_eu*pop_eu),bs='cr'),
@@ -2714,6 +2590,7 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -2725,10 +2602,7 @@ p_val=sum(T_perm>= T0)/B
 p_val
 ```
 
-```{r}
-gas_reduced=gam(gas_eu ~ s(pop_eu,bs='cr') + s(gdp_eu,bs='cr'),data=vec_gas)
-anova(gas_reduced,consump.gas.gam,test="F")
-```
+
 We cannot discard the interaction, let's try with the gdp
 
 ```{r}
@@ -2747,6 +2621,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -2760,10 +2636,16 @@ p_val
 So we don't quit gdp either
 
 ```{r}
+Acf(  consump.gas.gam$residuals
+)
+```
+
+```{r}
 Pacf(
   consump.gas.gam$residuals
 )
 ```
+
 Since the correlations are not negligible, we pass to first order differences
 
 ## DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
@@ -2826,6 +2708,7 @@ with(vec_oil.diff,plot(dif_pop_eu,dif_oil_eu))
 
 
 ```{r}
+
 consump.oil.petr.gam <- gam(dif_oil_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr') + s(I(dif_gdp_eu*dif_pop_eu),bs='cr'),data = vec_oil.diff) 
 
 summary(consump.oil.petr.gam)
@@ -2834,7 +2717,7 @@ hist(consump.oil.petr.gam$residuals)
 qqnorm(consump.oil.petr.gam$residuals)
 shapiro.test(consump.oil.petr.gam$residuals)
 ```
-We try to quit the interaction term (residuals are gaussian)
+We try to quit the interaction term (residuals are gaussian, but simple anova doesn't work)
 
 ```{r}
 T0 <- summary.aov(aov(gam(dif_oil_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr') + s(I(dif_gdp_eu*dif_pop_eu),bs='cr'),data = vec_oil.diff) ))[[1]][3,4]
@@ -2850,6 +2733,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -2919,6 +2804,7 @@ hist(consump.oil.petr.gam.3$residuals)
 qqnorm(consump.oil.petr.gam.3$residuals)
 shapiro.test(consump.oil.petr.gam.3$residuals)
 ```
+
 The third one seems promising, let's try to quit pop from it (residuals are gaussian)
 
 ```{r}
@@ -2938,50 +2824,13 @@ qqnorm(consump.oil.petr.gam.3$residuals)
 shapiro.test(consump.oil.petr.gam.3$residuals)
 ```
 
-We try to reduce the degree of the interaction term as well (residuals are gaussian)
-
-```{r}
-oil_reduced=lm(dif_oil_eu ~ dif_gdp_eu +  bs(I(dif_gdp_eu*dif_pop_eu),degree=2),data = vec_oil.diff) 
-anova(oil_reduced,consump.oil.petr.gam.3,test="F")
-```
-
-We can reduce the interaction degree
-
-```{r}
-consump.oil.petr.gam.3 <- lm(dif_oil_eu ~ dif_gdp_eu +  bs(I(dif_gdp_eu*dif_pop_eu),degree=2),data = vec_oil.diff) 
-
-summary(consump.oil.petr.gam.3)
-
-hist(consump.oil.petr.gam.3$residuals)
-qqnorm(consump.oil.petr.gam.3$residuals)
-shapiro.test(consump.oil.petr.gam.3$residuals)
-```
-
-Reduce again? (residuals are gaussian)
-```{r}
-oil_reduced=lm(dif_oil_eu ~ dif_gdp_eu +  bs(I(dif_gdp_eu*dif_pop_eu),degree=1),data = vec_oil.diff) 
-anova(oil_reduced,consump.oil.petr.gam.3,test="F")
-```
-
-We can reduce to degree 1
-
-```{r}
-consump.oil.petr.gam.3 <- lm(dif_oil_eu ~ dif_gdp_eu +  bs(I(dif_gdp_eu*dif_pop_eu),degree=1),data = vec_oil.diff) 
-
-summary(consump.oil.petr.gam.3)
-
-hist(consump.oil.petr.gam.3$residuals)
-qqnorm(consump.oil.petr.gam.3$residuals)
-shapiro.test(consump.oil.petr.gam.3$residuals)
-```
-
-Completely quit interaction? (gaussian residuals)
+Can we quit the interaction? (gaussian residuals)
 ```{r}
 oil_reduced=lm(dif_oil_eu ~ dif_gdp_eu ,data = vec_oil.diff) 
 anova(oil_reduced,consump.oil.petr.gam.3,test="F")
 ```
 
-Yes, we quit it completely
+Yes, we quit it
 ```{r}
 consump.oil.petr.gam.3 <- lm(dif_oil_eu ~ dif_gdp_eu ,data = vec_oil.diff) 
 
@@ -3060,6 +2909,7 @@ qqnorm(consump.oil.petr.gam.3$residuals)
 shapiro.test(consump.oil.petr.gam.3$residuals)
 ```
 
+
 ```{r}
 consump.oil.petr.gam=consump.oil.petr.gam.3
 
@@ -3108,7 +2958,7 @@ qqnorm(consump.fossils.gam$residuals)
 shapiro.test(consump.fossils.gam$residuals)
 ```
 
-Let's try to quit gdp as well (residuals are gaussian)
+Let's try to quit gdp as well (residuals are gaussian, but simple doesn't work)
 ```{r}
 T0 <- summary.aov(aov(gam(dif_fossil_eu ~ s(dif_gdp_eu,bs='cr') + s(dif_pop_eu,bs='cr') ,data = vec_fossil.diff) ))[[1]][1,4]
 
@@ -3123,6 +2973,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -3241,7 +3093,7 @@ hist(consump.gas.gam.3$residuals)
 qqnorm(consump.gas.gam.3$residuals)
 shapiro.test(consump.gas.gam.3$residuals)
 ```
-From the third, let's try to quit the interaction (residuals are gaussian)
+From the third, let's try to quit the interaction (residuals are gaussian, but simple anova doesn't work)
 
 
 ```{r}
@@ -3260,6 +3112,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -3301,6 +3155,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -3374,6 +3230,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -3438,6 +3296,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -3485,23 +3345,51 @@ consump.gas.gam.preds <- predict(consump.gas.gam, newdata=vec_gas_pred.diff, se=
 ```
 
 
+Plot regression
+```{r}
+#oil
+gdp.grid=with(vec_oil.diff,seq(min(dif_gdp_eu),max(dif_gdp_eu),length.out=100))
+pop.grid=with(vec_oil.diff,seq(min(dif_pop_eu),max(dif_pop_eu),length.out=100))
+grid.oil=expand.grid(gdp.grid,pop.grid)
+names(grid.oil)=c('dif_gdp_eu','dif_pop_eu')
+
+
+preds_oil=predict(consump.oil.petr.gam,newdata=grid.oil)
+persp3d(gdp.grid,pop.grid,preds_oil,col='darkolivegreen1',border="white",lwd=0.1,xlab="dif_gdp",ylab="dif_pop",alpha=0.5)
+with(vec_oil.diff, points3d(dif_gdp_eu ,dif_pop_eu ,dif_oil_eu ,col='black',size=10))
+```
+
+```{r}
+#fossils
+preds_ff=predict(consump.fossils.gam,newdata=grid.oil)
+persp3d(gdp.grid,pop.grid,preds_ff,col='gray50',border="white",lwd=0.1,xlab="dif_gdp",ylab="dif_pop",alpha=0.5)
+with(vec_fossil.diff, points3d(dif_gdp_eu ,dif_pop_eu ,dif_fossil_eu ,col='black',size=10))
+```
+
+
+```{r}
+#gas
+preds_gas=predict(consump.gas.gam,newdata=grid.oil)
+persp3d(gdp.grid,pop.grid,preds_gas,col='gainsboro',border="white",lwd=0.1,xlab="dif_gdp",ylab="dif_pop",alpha=0.5)
+with(vec_gas.diff, points3d(dif_gdp_eu ,dif_pop_eu ,dif_gas_eu ,col='black',size=10))
+```
+
 Plot predictions
 ```{r}
-# See graphs
-with(vec_oil.diff, plot(seq(1991,2019) ,dif_oil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Oil & Petr.'))
+with(vec_oil.diff, plot(seq(1991,2019) ,dif_oil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Prediction - Oil & Petr.'))
 points(seq(2020,2030), consump.oil.petr.gam.preds$fit ,lwd =2, col ="red")
 lines(seq(1991,2019),consump.oil.petr.gam$fitted.values,lwd=1,col="blue")
 lines(seq(1991,2030),rep(0,length(seq(1991,2030))),lty=2,lwd=1,col =" darkgrey ")
 
 
-with(vec_fossil.diff, plot(seq(1991,2019) ,dif_fossil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Fossil fuels'))
+with(vec_fossil.diff, plot(seq(1991,2019) ,dif_fossil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Prediction - Fossil fuels'))
 points(seq(2020,2030), consump.fossils.gam.preds$fit ,lwd =2, col ="red")
 lines(seq(1991,2019),consump.fossils.gam$fitted.values,lwd=1,col="blue")
 lines(seq(1991,2030),rep(0,length(seq(1991,2030))),lty=2,lwd=1,col =" darkgrey ")
 
 
 
-with(vec_gas.diff, plot(seq(1991,2019) ,dif_gas_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Natural Gas'))
+with(vec_gas.diff, plot(seq(1991,2019) ,dif_gas_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Prediction - Natural Gas'))
 points(seq(2020,2030), consump.gas.gam.preds$fit ,lwd =2, col ="red")
 lines(seq(1991,2019),consump.gas.gam$fitted.values,lwd=1,col="blue")
 lines(seq(1991,2030),rep(0,length(seq(1991,2030))),lty=2,lwd=1,col =" darkgrey ")
@@ -3611,11 +3499,10 @@ consump.renew.gam.preds <- predict(consump.renew.gam, newdata=vec_re_pred, se=T)
 ```
 
 
-
-
+Plot prediction
 ```{r}
 # See graphs
-with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='GAM Prediction - Renewable Energy Consumption'))
+with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='Prediction - Renewable Energy Consumption'))
 points(seq(2020,2030,1/3), consump.renew.gam.preds$fit ,cex=1, col ="red")
 lines(seq(1991,2019,1/3),consump.renew.gam$fitted.values,col="blue",lwd=1)
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),lwd=1,lty=2,col =" darkgrey ")
@@ -3643,14 +3530,11 @@ renew.predictions=renew.predictions[1,as.character(seq(2020,2030))]
 ghg=read.xlsx("data/ghg_emissions.xlsx", sheet=3, colNames=F)
 
 ghg <- na.omit(ghg) # Remove NA values
-#ghg=data.frame(t(ghg[,-1])) # Remove column names 
-#ghg <- ghg[!apply(ghg == "", 1, all), ] # Remove empty values
 
 ghg <- data.frame(lapply(ghg, as.numeric)) # Set cells as numeric
 ghg=data.frame(t(ghg))
 rownames(ghg) <- years_90_19
 
-#ghg <- ghg[-c(1,2)]
 colnames(ghg)="ValueGhg"
 
 head(ghg)
@@ -3677,31 +3561,17 @@ plot(seq(1991,2019),ghg.diff$diff_ghg,xlab="Years",ylab="Percentage emissions",m
 ```{r}
 #using differences for covariates
 vec_ghg.diff= cbind(ghg.diff$diff_ghg,vec_re$value_re,vec_oil.diff$dif_gdp_eu,vec_oil.diff$dif_pop_eu)
-vec_ghg.diff <- data.frame(vec_ghg)
+vec_ghg.diff <- data.frame(vec_ghg.diff)
 vec_ghg_pred.diff <- data.frame(t(renew.predictions),vec_oil_pred.diff$dif_gdp_eu,vec_oil_pred.diff$dif_pop_eu)
 
-colnames(vec_ghg) <- c("value_ghg", "value_re","value_gdp","value_pop")
+colnames(vec_ghg.diff) <- c("value_ghg", "value_re","value_gdp","value_pop")
 colnames(vec_ghg_pred.diff) <- c("value_re","value_gdp","value_pop")
 
 ```
 
 
-
-
 ```{r}
-#using original data for covariates (Greenhouse gases still in differences)
-vec_c02= cbind(Co2.diff$diff_co2,t(consump.renew.europe[,2:30]),gdp.total[2:30],pop.total[2:30])
-vec_c02 <- data.frame(vec_c02)
-vec_c02_pred <- data.frame(t(renew.predictions.total),gdp.total[31:41],pop.total[31:41])
-
-colnames(vec_c02) <- c("value_ghg", "value_re","value_gdp","value_pop")
-colnames(vec_c02_pred) <- c("value_re","value_gdp","value_pop")
-
-```
-
-
-
-```{r}
+#smoothing
 rownames(vec_ghg.diff)=years_90_19[2:30]
 vec_ghg.temp=t(vec_ghg.diff)
 vec_ghg.diff.s=smoothing_procedure(vec_ghg.temp,1991,2019,interval=3)
@@ -3749,6 +3619,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -3788,6 +3660,8 @@ pb <- progress_bar$new(
     total = B, clear = FALSE)
 pb$tick(0)
 B=1000
+set.seed(seed)
+
 for(perm in 1:B){
   permutation <- sample(n)
   residuals.H0 <- residuals.H0[permutation]
@@ -3819,12 +3693,12 @@ anova(ghg_reduced,ghg.gam,test="F")
 We cannot quit renewables, so we have our final model
 
 ```{r}
-Acf(ghg.gam$residuals)
+Acf(ghg.gam$residuals,main="Complete model Acf")
 
 ```
 
 ```{r}
-Pacf(ghg.gam$residuals)
+Pacf(ghg.gam$residuals,main="Complete model Pacf")
 ```
 
 
@@ -3840,7 +3714,11 @@ shapiro.test(ghg.gam.b$residuals)
 ```
 
 ```{r}
-Pacf(ghg.gam.b$residuals)
+Acf(ghg.gam.b$residuals,main="Baseline model Acf")
+```
+
+```{r}
+Pacf(ghg.gam.b$residuals,main="Baseline model Pacf")
 ```
 
 
@@ -3901,7 +3779,7 @@ A cut of 48.23% is expected with the actual rhythm, so more effort is needed in 
 
 ```{r}
 #with baseline model
-with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='GAM Prediction - Ghg Emissions'))
+with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Baseline Prediction - Ghg Emissions'))
 points(seq(2020,2030),Percentage_emissions.b,cex=.5,col="green")
 lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
 ```
@@ -3994,7 +3872,7 @@ c_preds.ghg.b <- conformal.pred(
 ```
 
 ```{r}
-plot(seq(1991,2019), vec_ghg.diff$value_ghg, xlim=range(c(1990,2030)),cex =.5,xlab="Year",ylab="Diff percentage",col =" darkgrey ",main='GAM conformal prediction - Ghg percentage variations',ylim=c(-10,10))
+plot(seq(1991,2019), vec_ghg.diff$value_ghg, xlim=range(c(1990,2030)),cex =.5,xlab="Year",ylab="Diff percentage",col =" darkgrey ",main='Baseline conformal prediction - Ghg percentage variations',ylim=c(-10,10))
 
 lines(seq(1991,2030),c_preds.ghg.b$pred,lwd =2, col ="green",lty=3)
 lines(seq(1991,2030),c_preds.ghg.b$up,lwd =1, col =" blue",lty =3)
@@ -4113,7 +3991,7 @@ rownames(sd.consump.nr.1991)[!(1:N%in%mcd_best.2)]
 
 ## Try the former method for each year 1991 - 2019 to see which is the most repeated outliers
 
-nr_outliers_mcd <- function(year, alpha=.75){
+nr_outliers_mcd <- function(year, alpha=.75,plott=F){
     year <- 2020-year
     sd.consump.nr.aux <- data.frame(cbind(sd.consump.ff.diff[,year], sd.consump.gas.diff[,year], sd.consump.oil.diff[,year])) # Combine all NR energy consumptions for 1991
     colnames(sd.consump.nr.aux) <- c("FF", "Gas", "Oil") 
