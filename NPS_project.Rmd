@@ -3910,6 +3910,19 @@ library(knitr)
 library(RobStatTM)
 ```
 
+# Robustness
+
+```{r}
+library(robustbase)
+library(psych)
+library(MASS)
+library(ellipse)
+library(here)
+library(DescTools)
+library(knitr)
+library(RobStatTM)
+```
+
 
 ## a. Test for COUNTRY outliers in diff dataset 
 
@@ -3991,7 +4004,7 @@ rownames(sd.consump.nr.1991)[!(1:N%in%mcd_best.2)]
 
 ## Try the former method for each year 1991 - 2019 to see which is the most repeated outliers
 
-nr_outliers_mcd <- function(year, alpha=.75,plott=F){
+nr_outliers_mcd <- function(year, alpha=.75){
     year <- 2020-year
     sd.consump.nr.aux <- data.frame(cbind(sd.consump.ff.diff[,year], sd.consump.gas.diff[,year], sd.consump.oil.diff[,year])) # Combine all NR energy consumptions for 1991
     colnames(sd.consump.nr.aux) <- c("FF", "Gas", "Oil") 
