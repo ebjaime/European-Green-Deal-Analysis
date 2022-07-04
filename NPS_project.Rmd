@@ -4033,7 +4033,7 @@ library(RobStatTM)
 ```
 
 
-## a. Test for outliers in diff dataset
+## a. Test for COUNTRY outliers in diff dataset 
 
 Objective: Try to spot the most extreme cases (countries) in our dataset(s), where our model could struggle the most when trying to predict future values. 
 
@@ -4238,7 +4238,112 @@ gdpp_outliers_mcd(1994, plott=T)
 ```
 
 
-## b. Robust linear models
+## b. Test for YEAR outliers in predictions
+
+We wonder if it is also possible to search for outliers on the year axis. In particular, having a dataset composed of year to year differences of different energy sources (i.e. columns as years and rows as energy sources), we will try to detect which year(s) had anomalous data with respect to the rest of the data.
+
+This would mean trasposing our data matrix (now the columns would be energy sources and the rows each of the years) and we treating each row as an observation for which we would want to detect outliers. This would be interpreted as years for which we had an anomalous growth (or decrease) wrt the rest of the years.
+
+### b1. O&P + FF + NG
+
+```{r}
+nr.past.preds <- data.frame(
+    scale(c(consump.oil.petr.gam$fitted.values,consump.oil.petr.gam.preds$fit)), 
+    scale(c(consump.fossils.gam$fitted.values,consump.fossils.gam.preds$fit)),
+    scale(c(consump.gas.gam$fitted.values,consump.gas.gam.preds$fit)))
+
+rownames(nr.past.preds) <- seq(1991,2030)
+colnames(nr.past.preds) <- c("oil.petr", "ff", "ng")
+```
+
+
+```{r}
+## N -> each year 
+## p -> NR energy sources 
+alpha <- .75
+fit_MCD.4 <- covMcd(x = nr.past.preds, alpha = alpha, nsamp = "best")
+
+mcd_best.4 <- fit_MCD.4$best
+
+N <- nrow(nr.past.preds)
+p <- ncol(nr.past.preds)
+plot(nr.past.preds, col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
+
+# Which are the outliers?
+rownames(nr.past.preds)[!(1:N%in%mcd_best.4)]
+
+```
+
+```{r}
+plot(seq(1991,2030), nr.past.preds[,1], col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
+plot(seq(1991,2030), nr.past.preds[,2], col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
+plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
+```
+
+
+### b2. Renewable Energy consumption
+
+REVIEW: With a single NR source, all are selected as ourliers
+
+```{r}
+r.past.preds <- data.frame(
+    c(consump.renew.gam$fitted.values, consump.renew.gam.preds$fit))
+
+rownames(r.past.preds) <- c(seq(1991,2019,by=1/3), seq(2020,2030,by=1/3))
+colnames(r.past.preds) <- c("renewables")
+```
+
+
+
+```{r}
+## N -> each year 
+## p -> R energy sources 
+alpha <- .75
+fit_MCD.5 <- covMcd(x = r.past.preds, alpha = alpha, nsamp = "best")
+
+mcd_best.5 <- fit_MCD.5$best
+
+N <- nrow(r.past.preds)
+p <- ncol(r.past.preds)
+plot(r.past.preds, col=ifelse(1:N%in%mcd_best.5,"black","red"),pch=19)
+
+# Which are the outliers?
+rownames(r.past.preds)[!(1:N%in%mcd_best.5)]
+
+```
+
+### b3. GHG
+REVIEW: With a single NR source, all are selected as ourliers
+
+```{r}
+ghg.past.preds <- data.frame(
+    c(c_preds$fit, c_preds$pred))
+
+rownames(ghg.past.preds) <- c(seq(1991,2019,by=1/3), seq(2020,2030,by=1/3))
+colnames(ghg.past.preds) <- c("ghg")
+```
+
+
+
+```{r}
+## N -> each year 
+## p -> R energy sources 
+alpha <- .75
+fit_MCD.6 <- covMcd(x = ghg.past.preds, alpha = alpha, nsamp = "best")
+
+mcd_best.6 <- fit_MCD.6$best
+
+N <- nrow(ghg.past.preds)
+p <- ncol(ghg.past.preds)
+plot(ghg.past.preds, col=ifelse(1:N%in%mcd_best.6,"black","red"),pch=19)
+
+# Which are the outliers?
+rownames(ghg.past.preds)[!(1:N%in%mcd_best.6)]
+
+```
+
+
+## c. Robust linear models
 
 Least Median Squares Regression
 
