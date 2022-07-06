@@ -3994,8 +3994,6 @@ rownames(r.past.preds) <- c(seq(1991,2019,by=1/3), seq(2020,2030,by=1/3))
 colnames(r.past.preds) <- c("renewables")
 ```
 
-
-
 ```{r}
 ## N -> each year 
 ## p -> 1 (Renewable energy consumption) 
@@ -4032,6 +4030,19 @@ mcd_outl.6 <- which(fit_MCD.6$mcd.wt==0)
 
 # Which are the outliers?
 rownames(r.past.preds)[(1:N%in%mcd_outl.6)]
+```
+
+
+### b4. RE + GHG
+
+```{r}
+reghg.past.preds <- data.frame(
+     scale(c(c_preds$fit, c_preds$pred)),
+     scale(c(consump.renew.gam$fitted.values, consump.renew.gam.preds$fit)), 
+)
+
+rownames(nr.past.preds) <- seq(1991,2030)
+colnames(nr.past.preds) <- c("oil.petr", "ff", "ng")
 ```
 
 
