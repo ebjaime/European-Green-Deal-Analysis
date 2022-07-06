@@ -1972,7 +1972,7 @@ with(vec_train_wind, points3d(gdp,pop,use_wind_elec.diff.total.s,col='black',siz
 
 Yearly wind evolution
 ```{r}
-plot(seq(2005,2019,0.5), use_wind_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Wind Diff Electricity Use')
+plot(seq(2005,2019,0.5), use_wind_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoules",col =" darkgrey ",main='Wind Diff Electricity Use')
 
 lines(seq(2005,2019,0.5),model_gam_wind$fitted.values,lwd=2,col="green",lty=1)
 
@@ -1997,7 +1997,7 @@ with(vec_train_hydro, points3d(gdp,pop,use_hydro_elec.diff.total.s,col='black',s
 
 Hydro yearly evolution
 ```{r}
-plot(seq(2005,2019,0.5), use_hydro_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Hydro Diff Electricity Use')
+plot(seq(2005,2019,0.5), use_hydro_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoules",col =" darkgrey ",main='Hydro Diff Electricity Use')
 
 lines(seq(2005,2019,0.5),model_gam_hydro$fitted.values,lwd=2,col="cyan1",lty=1)
 ```
@@ -2021,7 +2021,7 @@ with(vec_train_solar, points3d(gdp,pop,use_solar_elec.diff.total.s,col='black',s
 
 Solar yearly evolution
 ```{r}
-plot(seq(2005,2019,0.5), use_solar_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoule",col =" darkgrey ",main='Solar Diff Electricity Use')
+plot(seq(2005,2019,0.5), use_solar_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoules",col =" darkgrey ",main='Solar Diff Electricity Use')
 
 lines(seq(2005,2019,0.5),model_gam_solar$fitted.values,lwd=2,col="darkorange",lty=1)
 ```
@@ -3588,20 +3588,33 @@ qqnorm(ghg.gam$residuals)
 shapiro.test(ghg.gam$residuals)
 ```
 
+The gam machinery suggest us that it is sufficient a simple linear model!
 ```{r}
-Acf(ghg.gam$residuals)
+ghg.l <- lm(value_ghg ~ value_re, data=vec_ghg.diff)
+
+summary(ghg.l)
+
+hist(ghg.l$residuals)
+qqnorm(ghg.l$residuals)
+shapiro.test(ghg.l$residuals)
+```
+
+
+```{r}
+Acf(ghg.l$residuals)
 ```
 
 ```{r}
-Pacf(ghg.gam$residuals)
+Pacf(ghg.l$residuals)
 ```
+
 
 Plot Regression
 
 ```{r}
 newdata=with(vec_ghg.diff,seq(min(value_re),max(value_re),by=1))
 newdata=data.frame(value_re=newdata)
-ghg.reg=predict(ghg.gam,newdata=newdata,se=T)
+ghg.reg=predict(ghg.l,newdata=newdata,se=T)
 se.bands=cbind(ghg.reg$fit +2* ghg.reg$se.fit ,ghg.reg$fit -2* ghg.reg$se.fit)
 
 with(vec_ghg.diff,plot(value_re,value_ghg,main="Diff ghg vs diff renewables"))
@@ -3614,25 +3627,28 @@ matlines(newdata$value_re,se.bands,col="green",lwd=1,lty=2)
 ### Predicted decrease
 
 How much is the predicted decrease?
+
+
 ```{r}
 #predictions
-ghg.gam.preds <- predict(ghg.gam, newdata=vec_ghg_pred.diff, se=T)
+ghg.l.preds <- predict(ghg.l, newdata=vec_ghg_pred.diff, se=T)
 
-with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
-points(seq(2020,2030),ghg.gam.preds$fit ,cex=0.5, col ="red")
-lines(seq(1991,2019),ghg.gam$fitted.values,lwd=1,col="blue")
+with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
+points(seq(2020,2030),ghg.l.preds$fit ,cex=0.5, col ="red")
+lines(seq(1991,2019),ghg.l$fitted.values,lwd=1,col="blue")
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
 ```
 
 
 ```{r}
 
-deltas=as.numeric(ghg.gam.preds$fit)
+deltas=as.numeric(ghg.l.preds$fit)
 Percentage_emissions=ghg[30,1]+cumsum(deltas)
 Percentage_decrease=as.numeric(100-Percentage_emissions[11])
 
 Percentage_emissions
 Percentage_decrease
+
 ```
 
 A cut of 32.32% is expected with the actual rhythm, so more effort is needed in order to comply with the Green Deal objective!
@@ -3646,23 +3662,6 @@ lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
 
 
 Let's also compute the conformal prediction intervals
-```{r}
-train_gam_ghg <- function(x,y,out=NULL){
-    train_data=data.frame(y,x)
-    colnames(x)=c("value_re","value_gdp", "value_pop")
-    model_gam= gam(y ~ s(value_re,bs='cr') + s(value_gdp,bs='cr') + s(value_pop,bs='cr')+ s(I(value_gdp*value_pop),bs='cr') + s(I(value_re*value_pop),bs='cr') , 
-    data = train_data)
-}
-
-
-predict_gam_ghg <- function(obj, new_x){
-    new_x=data.frame(new_x)
-    colnames(new_x)=c("value_re","value_gdp", "value_pop")
-    as.numeric(predict(obj,new_x))
-}
-```
-
-
 
 ```{r}
 
