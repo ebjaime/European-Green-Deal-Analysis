@@ -1,10 +1,12 @@
 ---
 title: "NPS_project"
 output: html_document
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,warning=F)
 ```
 
 # TITLE
@@ -3382,7 +3384,7 @@ lines(seq(1991,2019),consump.oil.petr.gam$fitted.values,lwd=1,col="blue")
 lines(seq(1991,2030),rep(0,length(seq(1991,2030))),lty=2,lwd=1,col =" darkgrey ")
 
 
-with(vec_fossil.diff, plot(seq(1991,2019) ,dif_fossil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Prediction - Fossil fuels'))
+with(vec_fossil.diff, plot(seq(1991,2019) ,dif_fossil_eu ,xlim=c(1991,2030),cex =1,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Prediction - Fossil Fuels'))
 points(seq(2020,2030), consump.fossils.gam.preds$fit ,lwd =2, col ="red")
 lines(seq(1991,2019),consump.fossils.gam$fitted.values,lwd=1,col="blue")
 lines(seq(1991,2030),rep(0,length(seq(1991,2030))),lty=2,lwd=1,col =" darkgrey ")
@@ -3426,6 +3428,7 @@ with(vec_re.s,plot(value_ff,value_re,main="Diff renewables vs diff fossil fuels"
 with(vec_re.s,plot(value_ng,value_re,main="Diff renewables vs diff natural gas"))
 
 ```
+
 
 
 ```{r}
@@ -3502,7 +3505,7 @@ consump.renew.gam.preds <- predict(consump.renew.gam, newdata=vec_re_pred, se=T)
 Plot prediction
 ```{r}
 # See graphs
-with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='Prediction - Renewable Energy Consumption'))
+with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Prediction - Renewable Energy Consumption'))
 points(seq(2020,2030,1/3), consump.renew.gam.preds$fit ,cex=1, col ="red")
 lines(seq(1991,2019,1/3),consump.renew.gam$fitted.values,col="blue",lwd=1)
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),lwd=1,lty=2,col =" darkgrey ")
@@ -3601,11 +3604,11 @@ shapiro.test(ghg.l$residuals)
 
 
 ```{r}
-Acf(ghg.l$residuals)
+Acf(ghg.l$residuals,main="Residuals Acf")
 ```
 
 ```{r}
-Pacf(ghg.l$residuals)
+Pacf(ghg.l$residuals,main="Residuals Pacf")
 ```
 
 
@@ -3633,9 +3636,9 @@ How much is the predicted decrease?
 #predictions
 ghg.l.preds <- predict(ghg.l, newdata=vec_ghg_pred.diff, se=T)
 
-with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
-points(seq(2020,2030),ghg.l.preds$fit ,cex=0.5, col ="red")
-lines(seq(1991,2019),ghg.l$fitted.values,lwd=1,col="blue")
+with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.7,pch=19,xlab="Year",ylab="Diff percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
+points(seq(2020,2030),ghg.l.preds$fit ,cex=0.7,pch=19, col ="green")
+lines(seq(1991,2019),ghg.l$fitted.values,lwd=2,col="green")
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
 ```
 
@@ -3655,9 +3658,9 @@ A cut of 32.32% is expected with the actual rhythm, so more effort is needed in 
 
 
 ```{r}
-with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
-points(seq(2020,2030),Percentage_emissions,cex=.5,col="green")
-lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
+with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.7,pch=19,xlab="Year",ylab="Percentage" ,main='Prediction - Ghg Emissions'))
+points(seq(2020,2030),Percentage_emissions,cex=.7,col="red",pch=19)
+lines(seq(1990,2030),rep(45,length(seq(1990,2030))),lty=2,lwd=2,col="green")
 ```
 
 
@@ -3683,26 +3686,27 @@ predict_gam_ghg <- function(obj, new_x){
 c_preds.ghg <- conformal.pred(
     vec_ghg.diff[,2], 
     vec_ghg.diff[,1],
-    as.matrix(c(vec_ghg.diff[,2],vec_ghg_pred.diff[,1])),
+    as.matrix(vec_ghg_pred.diff[,1]),
     alpha=0.05, 
-    verbose=T, 
+    verbose=F, 
     train.fun = train_gam_ghg, 
     predict.fun = predict_gam_ghg)
 ```
 
 ```{r}
-plot(seq(1991,2019), vec_ghg.diff$value_ghg, xlim=range(c(1990,2030)),cex =.5,xlab="Year",ylab="Diff percentage",col =" darkgrey ",main='Conformal prediction - Ghg percentage variations',ylim=c(-10,10))
+plot(seq(1991,2019), vec_ghg.diff$value_ghg, xlim=range(c(1990,2030)),cex =.7,pch=19,xlab="Year",ylab="Diff percentage",col =" darkgrey ",main='Conformal prediction - Ghg Emissions',ylim=c(-10,10))
 
-lines(seq(1991,2030),c_preds.ghg$pred,lwd =2, col ="green",lty=3)
-lines(seq(1991,2030),c_preds.ghg$up,lwd =1, col =" blue",lty =3)
-lines(seq(1991,2030),c_preds.ghg$lo, lwd =1, col =" blue",lty =3)
-lines(seq(1991,2019),c_preds.ghg$fit, lwd =1, col =" green",lty =1)
+points(seq(2020,2030),c_preds.ghg$pred,cex=0.7,pch=19 ,col ="green")
+lines(seq(2020,2030),c_preds.ghg$up,lwd =2, col =" blue",lty =3)
+lines(seq(2020,2030),c_preds.ghg$lo, lwd =2, col =" blue",lty =3)
+lines(seq(1991,2019),c_preds.ghg$fit, lwd =2, col =" green",lty =1)
+lines(seq(1991,2030),rep(0,length(seq(1991,2030))),col="darkgrey",lty=2,lwd=1)
 ```
 
 
 ```{r}
-lo_perc=ghg[30,1]+cumsum(c_preds.ghg$lo[30:40])
-up_perc=ghg[30,1]+cumsum(c_preds.ghg$up[30:40])
+lo_perc=ghg[30,1]+cumsum(c_preds.ghg$lo)
+up_perc=ghg[30,1]+cumsum(c_preds.ghg$up)
 for (i in 1:11){
   lo_perc[i]=max(0,lo_perc[i])
   up_perc[i]=min(100,up_perc[i])
