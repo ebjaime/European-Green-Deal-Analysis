@@ -3720,9 +3720,10 @@ lines(seq(2020,2030),lo_perc,col="green",lty=2)
 lines(seq(2020,2030),up_perc,col="green",lty=2)
 ```
 
+
 # Robustness
 
-```{r}
+```{r echo = T, results = 'hide'}
 library(robustbase)
 library(psych)
 library(MASS)
@@ -3746,7 +3747,6 @@ sd.consump.gas.diff <- t(scale(t(consump.gas.diff.s)))
 
 sd.consump.renew.diff <- t(scale(t(consump.renew.diff[-1,])))
 
-# REVIEW: check if just from 1991-2019
 sd.pop.diff <- t(scale(t(pop.diff[,1:29])))
 sd.gdp.diff <- t(scale(t(gdp.diff[,1:29])))
 
@@ -3768,7 +3768,7 @@ alpha <- .75
 ```
 
 
-### a1. For Non-renewable energy consumption
+### a.1. For Non-renewable energy consumption
 Using Fossil fuels, Oil & petroleum and Natural Gas
 ```{r}
 ## N -> countries
@@ -3863,7 +3863,8 @@ plot(fit_MCD.2, classic=TRUE)
 rownames(sd.consump.nr.1991)[c(17,9,16,36)]
 
 ```
-### a2. For Renewable energy consumption 
+
+### a.2. For Renewable energy consumption 
 Using renwable differences
 ```{r}
 ## N -> countries
@@ -3887,7 +3888,7 @@ rownames(sd.consump.renew.diff)[!(1:N%in%mcd_best.3)]
 
 We cannot repeat the experiment with N coutnries and each dimension being teh renewable sources, since this would be a univariate dataset, where MCD cannot be applied
 
-### a3. For extra-covariates GDP & Population
+### a.3. For extra-covariates GDP & Population
 
 The "each year as a dimension" model, as in a1 and a2 will not be skipped.
 
@@ -3939,19 +3940,21 @@ gdpp_outliers_mcd(1994, plott=T)
 ```
 
 
-## b. Test for YEAR outliers in predictions
+## b.1. Test for YEAR outliers with predictions
 
 We wonder if it is also possible to search for outliers on the year axis. In particular, having a dataset composed of year to year differences of different energy sources (i.e. columns as years and rows as energy sources), we will try to detect which year(s) had anomalous data with respect to the rest of the data.
 
 This would mean trasposing our data matrix (now the columns would be energy sources and the rows each of the years) and we treating each row as an observation for which we would want to detect outliers. This would be interpreted as years for which we had an anomalous growth (or decrease) wrt the rest of the years.
 
-### b1. O&P + FF + NG
+
+
+### b.1.1. O&P + FF + NG (training + prediction)
 
 ```{r}
 nr.past.preds <- data.frame(
-    scale(c(consump.oil.petr.gam$fitted.values,consump.oil.petr.gam.preds$fit)), 
-    scale(c(consump.fossils.gam$fitted.values,consump.fossils.gam.preds$fit)),
-    scale(c(consump.gas.gam$fitted.values,consump.gas.gam.preds$fit)))
+    scale(c(t(consump.oil.petr.diff.total),consump.oil.petr.gam.preds$fit)), 
+    scale(c(t(consump.fossils.diff.total),consump.fossils.gam.preds$fit)),
+    scale(c(t(consump.gas.diff.total),consump.gas.gam.preds$fit)))
 
 rownames(nr.past.preds) <- seq(1991,2030)
 colnames(nr.past.preds) <- c("oil.petr", "ff", "ng")
@@ -3963,7 +3966,7 @@ colnames(nr.past.preds) <- c("oil.petr", "ff", "ng")
 ## p -> NR energy sources 
 alpha <- .75
 fit_MCD.4 <- covMcd(x = nr.past.preds, alpha = alpha, nsamp = "best")
-# plot(fit_MCD.4)
+plot(fit_MCD.4)
 
 mcd_best.4 <- fit_MCD.4$best
 
@@ -3971,21 +3974,24 @@ N <- nrow(nr.past.preds)
 p <- ncol(nr.past.preds)
 plot(nr.past.preds, col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
 
-# Which are the outliers?
+# Which are the most n - alpha*n "outlying" data?
 rownames(nr.past.preds)[!(1:N%in%mcd_best.4)]
-
+# And the cases considered outliers from distance plots?
+rownames(nr.past.preds)[!(fit_MCD.4$mcd.wt)]
 ```
 
 ```{r}
-plot(seq(1991,2030), nr.past.preds[,1], col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
-plot(seq(1991,2030), nr.past.preds[,2], col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
-plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(1:N%in%mcd_best.4,"black","red"),pch=19)
+plot(seq(1991,2030), nr.past.preds[,1], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19)
+plot(seq(1991,2030), nr.past.preds[,2], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19)
+plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19)
 ```
+There is a clear swamping effect going on since not all 9 years seem to be real outliers. The year with index 20 is a clear outlier while indices 16, 19 or 17 could also be considered as outliers, but by inspecting individual plots, does not look like it.
 
+### b.1.2. Renewable Energy consumption (training + prediction)
 
-### b2. Renewable Energy consumption
+REVIEW: Using GAM fitted values and not real train values!
 
-REVIEW: "...However, as an estimator for univariate location and scale the MCD is
+WARNING: "...However, as an estimator for univariate location and scale the MCD is
 outperformed by other methods (in terms of robustness and efficiency).
 Therefore the MCD is mainly useful for higher-dimensional data." ()[https://cseweb.ucsd.edu/~slovett/workshops/robust-statistics-2019/slides/donoho-multivariate.pdf]
 
@@ -4004,21 +4010,25 @@ alpha <- .75
 fit_MCD.5 <- covMcd(x = r.past.preds, alpha = alpha, nsamp = "best")
 plot(fit_MCD.5)
 
-mcd_outl.5 <- which(fit_MCD.5$mcd.wt==0)
-
-# Which are the outliers?
-rownames(r.past.preds)[(1:N%in%mcd_outl.5)]
+# Which are the cases considered outliers from distance plots?
+rownames(r.past.preds)[!(fit_MCD.5$mcd.wt)]
 ```
 
 
 
-### b3. GHG
+### b.1.3. GHG (training + prediction)
+
+REVIEW: Using GAM fitted values and not real train values!
+
+WARNING: "...However, as an estimator for univariate location and scale the MCD is
+outperformed by other methods (in terms of robustness and efficiency).
+Therefore the MCD is mainly useful for higher-dimensional data." ()[https://cseweb.ucsd.edu/~slovett/workshops/robust-statistics-2019/slides/donoho-multivariate.pdf]
 
 ```{r}
 ghg.past.preds <- data.frame(
-    c(c_preds$fit, c_preds$pred))
+    c(ghg.l$fitted.values, ghg.l.preds$fit))
 
-rownames(ghg.past.preds) <- c(seq(1991,2019,by=1/3), seq(2020,2030,by=1/3))
+rownames(ghg.past.preds) <- c(seq(1991,2019), seq(2020,2030))
 colnames(ghg.past.preds) <- c("ghg")
 ```
 
@@ -4026,32 +4036,342 @@ colnames(ghg.past.preds) <- c("ghg")
 ## N -> each year 
 ## p -> 1 (Renewable energy consumption)
 alpha <- .75
-fit_MCD.6 <- covMcd(x = r.past.preds, alpha = alpha, nsamp = "best")
+fit_MCD.6 <- covMcd(x = ghg.past.preds, alpha = alpha, nsamp = "best")
 plot(fit_MCD.6)
 
-mcd_outl.6 <- which(fit_MCD.6$mcd.wt==0)
-
-# Which are the outliers?
-rownames(r.past.preds)[(1:N%in%mcd_outl.6)]
+# Which are the cases considered outliers from distance plots?
+rownames(ghg.past.preds)[!(fit_MCD.6$mcd.wt)]
 ```
 
+## b.2. Test for YEAR outliers without predictions
 
-### b4. RE + GHG
+Let's try to find outlying years from our NRE consumption data which is .
+After finding outlying years the idea is to retrain our models and compare them to our original ones.
+
+### b.2.1. Outliers in NRE (training data)
+
+The idea behind this part is to retrain our models without the outliers in our original dataset.
+
 
 ```{r}
-reghg.past.preds <- data.frame(
-     scale(c(c_preds$fit, c_preds$pred)),
-     scale(c(consump.renew.gam$fitted.values, consump.renew.gam.preds$fit)), 
+nre.diff.sd.total <- data.frame(
+    scale(t(consump.oil.petr.diff.total)), 
+    scale(t(consump.fossils.diff.total)),
+    scale(t(consump.gas.diff.total))
 )
 
-rownames(nr.past.preds) <- seq(1991,2030)
-colnames(nr.past.preds) <- c("oil.petr", "ff", "ng")
+rownames(nre.diff.sd.total) <- seq(1991,2019)
+colnames(nre.diff.sd.total) <- c("oil.petr", "ff", "ng")
 ```
+
+
+```{r}
+## N -> each year 
+## p -> NR energy sources 
+alpha <- .75
+fit_MCD.7 <- covMcd(x = nre.diff.sd.total, alpha = alpha, nsamp = "best")
+plot(fit_MCD.7)
+
+mcd_best.7 <- fit_MCD.7$best
+
+N <- nrow(nre.diff.sd.total)
+p <- ncol(nre.diff.sd.total)
+plot(nre.diff.sd.total, col=ifelse(1:N%in%mcd_best.7,"black","red"),pch=19)
+
+# Which are the most n - alpha*n "outlying" data?
+rownames(nre.diff.sd.total)[!(1:N%in%mcd_best.7)]
+# Which should be considered outliers?
+rownames(nre.diff.sd.total)[!(fit_MCD.7$mcd.wt)]
+```
+
+There is a clear swamping going on if we take all 1-alpha outlying data since we can only see two years in the distance plot that could be tagged as outliers (not all 7). This can also be seen in the individual plots of NRE energies
+
+```{r}
+plot(seq(1991,2019), nre.diff.sd.total[,1], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19)
+plot(seq(1991,2019), nre.diff.sd.total[,2], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19)
+plot(seq(1991,2019), nre.diff.sd.total[,3], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19)
+
+```
+
+We select years with index 21 and 24 as outliers:
+```{r}
+outl.nre.train <- c(21, 24)
+rownames(nre.diff.sd.total)[outl.nre.train]
+```
+
+There is a problem we face when going into the next section of retraining the model without the year outliers. This comes from the fact that Renewable differences predictions are created directly from Non renewable consumptions differences.
+
+To obtain future predictions for Renewable consumptions we must use the future predictions for Non-renewable consumptions. So when choosing outliers for the Non-renewable consumption data should we use the MCD method on the original dataset, or on the combination of original+predictions dataset (as in b.1.1).
+
+Both have been done already. In one we obtain 7 outliers, while in this last methodology we obtain 2. Inspecting the indiviudal graphs and the distance-distance plots, we can assume that it is better to choose the outliers detected in the current section since the 2011 and 2014 yearly NRE consumptions are much clearer outliers than extra ones detected in the b.1.1. section.
+
+We can infere that the extra outliers from section b.1.1. are selected as such because of the extra-centrality that the predictions of NRE consumptions add to the dataset. It is clear that a swamping effect is taking place because some variabilities are amplified and falsely tagged as outlying. 
+
+### b.2.2. Redo DIFF_RE' ~ DIFF_NRE' model
+
+```{r}
+# Join all energies for common DF
+vec_re.rob <- cbind(as.numeric(consump.renew.diff.total[1,]),vec_oil.diff$dif_oil_eu, vec_fossil.diff$dif_fossil_eu, vec_gas.diff$dif_gas_eu)
+
+vec_re.rob <- data.frame(vec_re)[-outl.nre.train,] # Discard Outlying data
+colnames(vec_re.rob) <- c("value_re", "value_oil", "value_ff", "value_ng")
+```
+
+Smoothing procedure
+
+```{r}
+vec_re.rob.temp=t(vec_re.rob)
+vec_re.rob.s.1=smoothing_procedure(vec_re.rob.temp, 1991, 1990+outl.nre.train[1]-1,interval=3)
+vec_re.rob.s.2=smoothing_procedure(vec_re.rob.temp, 1990+outl.nre.train[1]+1, 1990+outl.nre.train[2]-1,interval=3)
+vec_re.rob.s.3=smoothing_procedure(vec_re.rob.temp, 1990+outl.nre.train[2]+1, 2019,interval=3)
+
+vec_re.rob.s = cbind(vec_re.rob.s.1, vec_re.rob.s.2, vec_re.rob.s.3)
+
+rownames(vec_re.rob.s)=rownames(vec_re.rob.temp)
+vec_re.rob.s=data.frame(t(vec_re.rob.s))
+```
+
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.rob.s)
+
+summary(consump.renew.gam.rob)
+
+hist(consump.renew.gam.rob$residuals)
+qqnorm(consump.renew.gam.rob$residuals)
+shapiro.test(consump.renew.gam.rob$residuals)
+```
+
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ng),bs='cr'), data=vec_re.rob.s)
+
+summary(consump.renew.gam.rob)
+
+hist(consump.renew.gam.rob$residuals)
+qqnorm(consump.renew.gam.rob$residuals)
+shapiro.test(consump.renew.gam.rob$residuals)
+```
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_oil*value_ng),bs='cr'), data=vec_re.rob.s)
+
+summary(consump.renew.gam.rob)
+
+hist(consump.renew.gam.rob$residuals)
+qqnorm(consump.renew.gam.rob$residuals)
+shapiro.test(consump.renew.gam.rob$residuals)
+```
+
+
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ng),bs='cr'), data=vec_re.rob.s)
+
+summary(consump.renew.gam.rob)
+
+hist(consump.renew.gam.rob$residuals)
+qqnorm(consump.renew.gam.rob$residuals)
+shapiro.test(consump.renew.gam.rob$residuals)
+```
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr'), data=vec_re.rob.s)
+
+summary(consump.renew.gam.rob)
+
+hist(consump.renew.gam.rob$residuals)
+qqnorm(consump.renew.gam.rob$residuals)
+shapiro.test(consump.renew.gam.rob$residuals)
+```
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr'), data=vec_re.rob.s)
+
+summary(consump.renew.gam.rob)
+
+hist(consump.renew.gam.rob$residuals)
+qqnorm(consump.renew.gam.rob$residuals)
+shapiro.test(consump.renew.gam.rob$residuals)
+```
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ng,bs='cr'), data=vec_re.rob.s)
+
+summary(consump.renew.gam.rob)
+
+hist(consump.renew.gam.rob$residuals)
+qqnorm(consump.renew.gam.rob$residuals)
+shapiro.test(consump.renew.gam.rob$residuals)
+```
+This last model still has an okey p-value but R-squared decreases too much. Best model seems The one consisting of the three variables and no interactions. 
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr'), data=vec_re.rob.s)
+```
+
+
+Get predictions
+
+```{r}
+# Smoothing of oil, ff and gas already in oil.preds.s, ff.preds.s, gas.preds.s
+
+vec_re_pred.rob <- t(rbind(oil.preds.s,ff.preds.s, gas.preds.s))
+vec_re_pred.rob <- data.frame(vec_re_pred.rob)
+colnames(vec_re_pred.rob) <- c("value_oil", "value_ff", "value_ng")
+
+
+consump.renew.gam.preds.rob <- predict(consump.renew.gam.rob, newdata=vec_re_pred.rob, se=T)
+```
+
+
+```{r}
+renew.predictions.rob=data.frame(t(consump.renew.gam.preds.rob$fit))
+colnames(renew.predictions.rob)=seq(2020,2030,1/3)
+renew.predictions.rob=renew.predictions.rob[1,as.character(seq(2020,2030))]
+```
+
+
+
+### b.2.3. Redo DIFF_GHG' ~ DIFF_RE' model
+
+Create train dataset from new predictions with renewable sources without outlying years
+```{r}
+vec_ghg.diff.2 <- cbind(ghg.diff$diff_ghg[-outl.nre.train], vec_re.rob$value_re)
+vec_ghg.diff.2 <- data.frame(vec_ghg.diff.2)
+vec_ghg_pred.diff.2 <- data.frame(t(renew.predictions.rob))
+
+colnames(vec_ghg.diff.2) <- c("value_ghg", "value_re")
+colnames(vec_ghg_pred.diff.2)="value_re"
+```
+
+
+```{r}
+ghg.gam.2 <- gam(value_ghg ~ s(value_re, bs='cr'), data=vec_ghg.diff.2)
+
+summary(ghg.gam.2)
+
+hist(ghg.gam.2$residuals)
+qqnorm(ghg.gam.2$residuals)
+shapiro.test(ghg.gam.2$residuals)
+```
+
+Residuals are not normal. A GAM model does not seem to be okey.
+Let's try as before to use a linear model. A linear model will result in exactly the same output since we are using a single regressor:
+
+```{r}
+ghg.l.2 <- lm(value_ghg ~ value_re, data=vec_ghg.diff.2)
+
+summary(ghg.l.2)
+
+hist(ghg.l.2$residuals)
+qqnorm(ghg.l.2$residuals)
+shapiro.test(ghg.l.2$residuals)
+
+```
+
+
+
+
+```{r}
+ghg.rob <- ghg.l.2
+
+ghg.rob.preds <- predict(ghg.rob, newdata=vec_ghg_pred.diff.2, se=T)
+
+```
+
+
+
+
+
+### b.2.4. Compare with original models
+
+Plot new vs past predictions of RE ~ NRE:
+```{r}
+seq.outl <- c(seq(1991,1990+outl.nre.train[1]-1),
+              seq(1990+outl.nre.train[1]+1, 1990+outl.nre.train[2]-1),
+              seq(1990+outl.nre.train[2]+1, 2019))
+seq.outl.s <- c(seq(1991,1990+outl.nre.train[1]-1, 1/3),
+              seq(1990+outl.nre.train[1]+1, 1990+outl.nre.train[2]-1, 1/3),
+              seq(1990+outl.nre.train[2]+1, 2019, 1/3))
+
+# Plot previous predictions
+with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='Prediction - Renewable Energy Consumption'))
+points(seq(2020,2030,1/3), consump.renew.gam.preds$fit ,cex=1, pch=24, col ="coral")
+lines(seq(1991,2019,1/3),consump.renew.gam$fitted.values,col="lightblue",lwd=1)
+
+# Plot new "robust" predictions
+points(1990+outl.nre.train, vec_re$value_re[outl.nre.train], col =" black ") # Outliers
+points(seq(2020,2030,1/3), consump.renew.gam.preds.rob$fit ,cex=1, pch=25, col ="brown")
+lines(seq.outl.s,consump.renew.gam.rob$fitted.values,col="blue",lwd=1)
+
+lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),lwd=1,lty=2,col =" darkgrey ")
+
+```
+
+
+Plot new vs past predictions of GHG ~ RE:
+
+```{r}
+# Plot previous predictions
+with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
+points(seq(2020,2030),ghg.l.preds$fit ,cex=0.5, pch=24, col ="coral")
+lines(seq(1991,2019),ghg.l$fitted.values,lwd=1,col="lightblue")
+lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
+
+# Plot new "robust" predictions
+points(1990+outl.nre.train,vec_ghg.diff.2$value_ghg[outl.nre.train],xlim=c(1990,2030),cex =.5,col =" darkgrey ")
+points(seq(2020,2030),ghg.rob.preds$fit ,cex=0.5, pch=25, col ="brown")
+lines(seq.outl,ghg.rob$fitted.values,lwd=1,col="blue")
+lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
+
+```
+
+
+Plot regression
+```{r}
+newdata=with(vec_ghg.diff, seq(min(value_re), max(value_re),by=1))
+newdata=data.frame(value_re=newdata)
+ghg.reg.rob=predict(ghg.rob, newdata=newdata,se=T)
+se.bands.rob=cbind(ghg.reg.rob$fit +2* ghg.reg.rob$se.fit ,ghg.reg.rob$fit -2* ghg.reg.rob$se.fit)
+
+with(vec_ghg.diff,plot(value_re,value_ghg,main="Diff ghg vs diff renewables"))
+# Previous regression
+lines(newdata$value_re,ghg.reg$fit,col="darkgreen",lwd=2)
+matlines(newdata$value_re,se.bands,col="darkgreen",lwd=1,lty=2)
+# New regression
+lines(newdata$value_re, ghg.reg.rob$fit, col="green", lwd=2)
+matlines(newdata$value_re, se.bands.rob, col="green", lwd=1, lty=2)
+
+```
+
+
+```{r}
+
+deltas.rob=as.numeric(ghg.rob.preds$fit)
+Percentage_emissions.rob=ghg[30,1]+cumsum(deltas.rob)
+Percentage_decrease.rob=as.numeric(100-Percentage_emissions.rob[11])
+
+Percentage_emissions.rob
+Percentage_decrease.rob
+
+```
+
+Plot predictions
+```{r}
+with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
+points(seq(2020,2030),Percentage_emissions,cex=.5,pch=24,col="darkgreen")
+points(seq(2020,2030), Percentage_emissions.rob, cex=.5,pch=25,col="green")
+lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
+```
+
+
+
 
 
 ## c. Robust linear models
 
-Least Median Squares Regression
+### c.1. Least Median Squares Regression
 
 ```{r}
 
@@ -4100,7 +4420,7 @@ shapiro.test(fit_lms.6$residuals)
 
 ```
 
-Least Trimmed Squares Regression
+### c.2. Least Trimmed Squares Regression
 
 ```{r}
 # Core 1. EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
@@ -4141,5 +4461,4 @@ hist(fit_lms.12$residuals)
 qqnorm(fit_lms.12$residuals)
 shapiro.test(fit_lms.12$residuals)
 ```
-
 
