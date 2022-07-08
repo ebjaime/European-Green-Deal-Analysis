@@ -3814,7 +3814,7 @@ rownames(sd.consump.nr.1991)[!(1:N%in%mcd_best.2)]
 
 ## Try the former method for each year 1991 - 2019 to see which is the most repeated outliers
 
-nr_outliers_mcd <- function(year, alpha=.75){
+nr_outliers_mcd <- function(year, alpha=.75,plott=F){
     year <- 2020-year
     sd.consump.nr.aux <- data.frame(cbind(sd.consump.ff.diff[,year], sd.consump.gas.diff[,year], sd.consump.oil.diff[,year])) # Combine all NR energy consumptions for 1991
     colnames(sd.consump.nr.aux) <- c("FF", "Gas", "Oil") 
@@ -3944,7 +3944,7 @@ gdpp_outliers_mcd(1994, plott=T)
 
 We wonder if it is also possible to search for outliers on the year axis. In particular, having a dataset composed of year to year differences of different energy sources (i.e. columns as years and rows as energy sources), we will try to detect which year(s) had anomalous data with respect to the rest of the data.
 
-This would mean trasposing our data matrix (now the columns would be energy sources and the rows each of the years) and we treating each row as an observation for which we would want to detect outliers. This would be interpreted as years for which we had an anomalous growth (or decrease) wrt the rest of the years.
+This would mean transposing our data matrix (now the columns would be energy sources and the rows each of the years) and we treating each row as an observation for which we would want to detect outliers. This would be interpreted as years for which we had an anomalous growth (or decrease) wrt the rest of the years.
 
 
 
@@ -4045,7 +4045,7 @@ rownames(ghg.past.preds)[!(fit_MCD.6$mcd.wt)]
 
 ## b.2. Test for YEAR outliers without predictions
 
-Let's try to find outlying years from our NRE consumption data which is .
+Let's try to find outlying years from our NRE consumption data which is ???.
 After finding outlying years the idea is to retrain our models and compare them to our original ones.
 
 ### b.2.1. Outliers in NRE (training data)
@@ -4103,7 +4103,7 @@ There is a problem we face when going into the next section of retraining the mo
 
 To obtain future predictions for Renewable consumptions we must use the future predictions for Non-renewable consumptions. So when choosing outliers for the Non-renewable consumption data should we use the MCD method on the original dataset, or on the combination of original+predictions dataset (as in b.1.1).
 
-Both have been done already. In one we obtain 7 outliers, while in this last methodology we obtain 2. Inspecting the indiviudal graphs and the distance-distance plots, we can assume that it is better to choose the outliers detected in the current section since the 2011 and 2014 yearly NRE consumptions are much clearer outliers than extra ones detected in the b.1.1. section.
+Both have been done already. With the second one we obtain 7 outliers, while with the first methodology we obtain 2. Inspecting the indiviudal graphs and the distance-distance plots, we can assume that it is better to choose the outliers detected in the current section since the 2011 and 2014 yearly NRE consumptions are much clearer outliers than extra ones detected in the b.1.1. section.
 
 We can infere that the extra outliers from section b.1.1. are selected as such because of the extra-centrality that the predictions of NRE consumptions add to the dataset. It is clear that a swamping effect is taking place because some variabilities are amplified and falsely tagged as outlying. 
 
@@ -4131,6 +4131,13 @@ rownames(vec_re.rob.s)=rownames(vec_re.rob.temp)
 vec_re.rob.s=data.frame(t(vec_re.rob.s))
 ```
 
+```{r}
+with(vec_re.rob.s,plot(value_oil,value_re,main="Diff ren vs diff oil"))
+with(vec_re.rob.s,plot(value_ff,value_re,main="Diff ren vs diff ff"))
+with(vec_re.rob.s,plot(value_ng,value_re,main="Diff ren vs diff ng"))
+
+```
+
 
 ```{r}
 consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.rob.s)
@@ -4142,9 +4149,17 @@ qqnorm(consump.renew.gam.rob$residuals)
 shapiro.test(consump.renew.gam.rob$residuals)
 ```
 
+Let's test whether oil and oil-fossil fuels interaction are needed (gaussian residuals)
 
 ```{r}
-consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ng),bs='cr'), data=vec_re.rob.s)
+ren_rob_reduced= gam(value_re ~ s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.rob.s)
+anova(ren_rob_reduced,consump.renew.gam.rob,test="F")
+```
+
+We can discard them
+
+```{r}
+consump.renew.gam.rob <- gam(value_re ~  s(value_ff,bs='cr') + s(value_ng,bs='cr') +  s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.rob.s)
 
 summary(consump.renew.gam.rob)
 
@@ -4153,63 +4168,22 @@ qqnorm(consump.renew.gam.rob$residuals)
 shapiro.test(consump.renew.gam.rob$residuals)
 ```
 
+Let's test whether oil-natural gas interaction is needed (gaussian residuals) 
+
 ```{r}
-consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr') + s(I(value_oil*value_ng),bs='cr'), data=vec_re.rob.s)
-
-summary(consump.renew.gam.rob)
-
-hist(consump.renew.gam.rob$residuals)
-qqnorm(consump.renew.gam.rob$residuals)
-shapiro.test(consump.renew.gam.rob$residuals)
+ren_rob_reduced= gam(value_re ~ s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_ff*value_ng),bs='cr') + s(I(value_oil*value_ff*value_ng),bs='cr'), data=vec_re.rob.s)
+anova(ren_rob_reduced,consump.renew.gam.rob,test="F")
 ```
 
-
+We cannot quit this interaction, so we have our model
 
 ```{r}
-consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ng),bs='cr'), data=vec_re.rob.s)
-
-summary(consump.renew.gam.rob)
-
-hist(consump.renew.gam.rob$residuals)
-qqnorm(consump.renew.gam.rob$residuals)
-shapiro.test(consump.renew.gam.rob$residuals)
+Acf(consump.renew.gam.rob$residuals)
 ```
 
 ```{r}
-consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr') + s(I(value_oil*value_ff),bs='cr'), data=vec_re.rob.s)
-
-summary(consump.renew.gam.rob)
-
-hist(consump.renew.gam.rob$residuals)
-qqnorm(consump.renew.gam.rob$residuals)
-shapiro.test(consump.renew.gam.rob$residuals)
+Pacf(consump.renew.gam.rob$residuals)
 ```
-
-```{r}
-consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr'), data=vec_re.rob.s)
-
-summary(consump.renew.gam.rob)
-
-hist(consump.renew.gam.rob$residuals)
-qqnorm(consump.renew.gam.rob$residuals)
-shapiro.test(consump.renew.gam.rob$residuals)
-```
-
-```{r}
-consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ng,bs='cr'), data=vec_re.rob.s)
-
-summary(consump.renew.gam.rob)
-
-hist(consump.renew.gam.rob$residuals)
-qqnorm(consump.renew.gam.rob$residuals)
-shapiro.test(consump.renew.gam.rob$residuals)
-```
-This last model still has an okey p-value but R-squared decreases too much. Best model seems The one consisting of the three variables and no interactions. 
-
-```{r}
-consump.renew.gam.rob <- gam(value_re ~ s(value_oil,bs='cr') + s(value_ff,bs='cr') + s(value_ng,bs='cr'), data=vec_re.rob.s)
-```
-
 
 Get predictions
 
@@ -4224,6 +4198,14 @@ colnames(vec_re_pred.rob) <- c("value_oil", "value_ff", "value_ng")
 consump.renew.gam.preds.rob <- predict(consump.renew.gam.rob, newdata=vec_re_pred.rob, se=T)
 ```
 
+Plot prediction
+```{r}
+with(vec_re.rob, plot(rownames(vec_re.rob) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Robust prediction - Renewable Energy Consumption'))
+points(seq(2020,2030,1/3), consump.renew.gam.preds.rob$fit ,cex=1, col ="red")
+lines(rownames(vec_re.rob.s),consump.renew.gam.rob$fitted.values,col="blue",lwd=1)
+lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),lwd=1,lty=2,col =" darkgrey ")
+
+```
 
 ```{r}
 renew.predictions.rob=data.frame(t(consump.renew.gam.preds.rob$fit))
@@ -4241,6 +4223,7 @@ vec_ghg.diff.2 <- cbind(ghg.diff$diff_ghg[-outl.nre.train], vec_re.rob$value_re)
 vec_ghg.diff.2 <- data.frame(vec_ghg.diff.2)
 vec_ghg_pred.diff.2 <- data.frame(t(renew.predictions.rob))
 
+rownames(vec_ghg.diff.2)=rownames(vec_re.rob)
 colnames(vec_ghg.diff.2) <- c("value_ghg", "value_re")
 colnames(vec_ghg_pred.diff.2)="value_re"
 ```
@@ -4256,8 +4239,8 @@ qqnorm(ghg.gam.2$residuals)
 shapiro.test(ghg.gam.2$residuals)
 ```
 
-Residuals are not normal. A GAM model does not seem to be okey.
-Let's try as before to use a linear model. A linear model will result in exactly the same output since we are using a single regressor:
+The GAM machinery still suggest us to use a linear model, however unfortunately now the model is not significant at 5%.
+A linear model will result in exactly the same output since we are using a single regressor:
 
 ```{r}
 ghg.l.2 <- lm(value_ghg ~ value_re, data=vec_ghg.diff.2)
@@ -4309,6 +4292,22 @@ lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),lwd=1,lty=2,col =" da
 
 ```
 
+Plot regression GHG ~ RE
+```{r}
+newdata=with(vec_ghg.diff, seq(min(value_re), max(value_re),by=1))
+newdata=data.frame(value_re=newdata)
+ghg.reg.rob=predict(ghg.rob, newdata=newdata,se=T)
+se.bands.rob=cbind(ghg.reg.rob$fit +2* ghg.reg.rob$se.fit ,ghg.reg.rob$fit -2* ghg.reg.rob$se.fit)
+
+with(vec_ghg.diff,plot(value_re,value_ghg,main="Diff ghg vs diff renewables"))
+# Previous regression
+lines(newdata$value_re,ghg.reg$fit,col="darkgreen",lwd=2)
+matlines(newdata$value_re,se.bands,col="darkgreen",lwd=1,lty=2)
+# New regression
+lines(newdata$value_re, ghg.reg.rob$fit, col="green", lwd=2)
+matlines(newdata$value_re, se.bands.rob, col="green", lwd=1, lty=2)
+
+```
 
 Plot new vs past predictions of GHG ~ RE:
 
@@ -4324,24 +4323,6 @@ points(1990+outl.nre.train,vec_ghg.diff.2$value_ghg[outl.nre.train],xlim=c(1990,
 points(seq(2020,2030),ghg.rob.preds$fit ,cex=0.5, pch=25, col ="brown")
 lines(seq.outl,ghg.rob$fitted.values,lwd=1,col="blue")
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
-
-```
-
-
-Plot regression
-```{r}
-newdata=with(vec_ghg.diff, seq(min(value_re), max(value_re),by=1))
-newdata=data.frame(value_re=newdata)
-ghg.reg.rob=predict(ghg.rob, newdata=newdata,se=T)
-se.bands.rob=cbind(ghg.reg.rob$fit +2* ghg.reg.rob$se.fit ,ghg.reg.rob$fit -2* ghg.reg.rob$se.fit)
-
-with(vec_ghg.diff,plot(value_re,value_ghg,main="Diff ghg vs diff renewables"))
-# Previous regression
-lines(newdata$value_re,ghg.reg$fit,col="darkgreen",lwd=2)
-matlines(newdata$value_re,se.bands,col="darkgreen",lwd=1,lty=2)
-# New regression
-lines(newdata$value_re, ghg.reg.rob$fit, col="green", lwd=2)
-matlines(newdata$value_re, se.bands.rob, col="green", lwd=1, lty=2)
 
 ```
 
