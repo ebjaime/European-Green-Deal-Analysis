@@ -25,7 +25,6 @@ library(jsonlite)
 library(ISLR2)
 library(pbapply)
 # Depth
-#library(DepthProc)
 #library(robustbase)
 # Functional data
 library(roahd)
@@ -112,7 +111,7 @@ smoothing_procedure <- function (data, from, to, write_to=NA, interval=3, row_na
         
         xfd <- ys$fd
         
-        data.yby <- eval.fd(seq(min(n.comb.year.grid),max(n.comb.year.grid), 1/interval), xfd) #            Obtain data year by year
+        data.yby <- eval.fd(seq(min(n.comb.year.grid),max(n.comb.year.grid), 1/interval), xfd) #                    Obtain data year by year
         
         new.data <- rbind(new.data, c( rep(NA, ((to-from) + 1 - length(n.comb.year.grid))*interval),
                                        data.yby))
@@ -136,11 +135,7 @@ smoothing_procedure <- function (data, from, to, write_to=NA, interval=3, row_na
 In our script "preprocessing_SSP.rmd", we have additional code regarding the transformation of data of the SSP original data to fit our needs and located in "data/ssp_iiasa_YtY_gdp.xlsx" & "data/ssp_iiasa_YtY_pop.xlsx".
 
 
-
-# Starting Point: Analysis of current European Renewable Transition
-
-
-Loading necessary datasets. In energy balances we don't have the value Final Consumption (FC), but it can be estimated as sum of several.
+Loading necessary datasets
 
 ```{r}
 energy.balances.1  <- read.xlsx("data/complete_energy_balances.xlsx",sheet=1) # Gross available energy, first sheet should be the best
@@ -157,7 +152,7 @@ consump.renew.5  <- read.xlsx("data/consumption_renewables.xlsx",sheet=5) # Rene
 
 percent.renew <- read.xlsx("data/percentage_renewables.xlsx") 
 
-prod.by.fuel.total <- read.xlsx("data/production_capacities_by_fuel.xlsx", sheet=1)
+prod.by.fuel.total <- read.xlsx("data/production_capacities_by_fuel.xlsx", sheet=1) # Electricity capacity
 prod.by.fuel.comb <- read.xlsx("data/production_capacities_by_fuel.xlsx", sheet=2)
 prod.by.fuel.nuclear <- read.xlsx("data/production_capacities_by_fuel.xlsx", sheet=9)
 
@@ -257,7 +252,7 @@ colnames(consump.renew.countries)=year.grid
 ```
 
 Since we are working with time series, by their nature data are yearly correlated.
-To deal with this problem, let's construct year to year variations datasets:
+To deal with this problem, let's construct year to year variations datasets that will be useful later on:
 ```{r}
 energy.balances.diff <- energy.balances.p[-1,-1] - energy.balances.p[-1,-length(energy.balances.p)]
 consump.fossils.diff <- consump.fossils.p[-1,-1] - consump.fossils.p[-1,-length(consump.fossils.p)]
@@ -272,12 +267,15 @@ consump.gas.diff <- rbind(year=seq(1991, 2019), consump.gas.diff)
 consump.renew.diff <- rbind(year=seq(1991, 2019), consump.renew.diff)
 ```
 
-The analysis of current European renewable transition is structured in three sections:
+
+# Starting Point: Analysis of current European Renewable Transition
+
+To properly deal with our objective we thought it was important to analyze, as a starting point, the current European situation and in particular its “Green Transition”.  Since to do so we should take into account several indicators, we set this analysis in 3 important consequent steps, in a way to look at the European green transition from 3 main different perspectives.
 
 ## First target: investigate how renewable and non-renewable consumptions are evolving.
 
 
-We can visualize the consumption levels of all EU countries.
+Let's have a first look at the consumption levels of all EU countries.
 
 Via time series visualization of :
 ```{r}
@@ -301,47 +299,16 @@ matplot(seq(year.min, year.max), t(consump.renew.countries), type="l", lty=1,
         ylab="Terajoules")
 ```
 
-Via boxplot:
-```{r}
-#boxplot(energy.balances.countries, main="Boxplot Energy Balances", xlab="Countries", 
-        #ylab="Terajoules")
+First let us check for normality with a simple Shapiro-Wilk test, to justify the importance of using nonparametric tools.
 
-boxplot(consump.fossils.countries, main="Boxplot of Consumption of Solid Fossil Fuels", xlab="Countries", 
-        ylab="Terajoule")
-
-boxplot(consump.oil.petr.countries, main="Boxplot of Consumption of Oil and Petroleum", xlab="Countries", 
-        ylab="Terajoule")
-
-boxplot(consump.gas.countries, main="Boxplot of Consumption of Natural Gas", xlab="Countries", 
-        ylab="Terajoule")
-
-boxplot(consump.renew.countries, main="Consumption of Renewables", xlab="Countries", 
-        ylab="Terajoule")
-```
-
-
-First let us check for normality with a simple Shapiro-Wilk test.
-
-Let us visualize a random country from the dataset and check whether it might be normally distributed:
-
-```{r}
-
-index.italy <- which(rownames(consump.renew.diff) == c("Italy"))
-hist(t(consump.fossils.diff)[,index.italy])
-hist(t(consump.oil.petr.diff)[,index.italy])
-hist(t(consump.gas.diff)[,index.italy])
-hist(t(consump.renew.diff)[,index.italy])
-
-```
-
-Now to check the distribution of p-values obtained with a Shapiro-Wilk test:
+We check the distribution of p-values obtained with a Shapiro-Wilk test:
 ```{r}
 
 p.values.ff <- numeric(length(countries.list)) # Fossil fuels
 p.values.op <- numeric(length(countries.list)) # Oil&Petr.
 p.values.ng <- numeric(length(countries.list)) # Natural gas 
 p.values.re <- numeric(length(countries.list)) # RE
-# FIXME: Error in shapiro.test(t(consump.gas.diff)[, c]) :  all 'x' values are identical
+
 for(c in 1:length(countries.list)){
   
   if (identical(diff(as.numeric(t(consump.fossils.diff[-c(1,2,3,4),])[,c])),rep(0,length(as.numeric(t(consump.fossils.diff[-c(1,2,3,4),])[,c]))-1)))  #we check that values are not all equal, if it happens we put a simbolic value in the vector of p-values.
@@ -410,7 +377,6 @@ matplot(seq(year.min, year.max), t(rbind(consump.fossils.mean,
 legend("topright", legend =c("Fossil Fuels","Oil and Petroleum","Natural Gas"), col=1:3, pch=2)
 ```
 
-
 We start with a permutational MANOVA to see whether the three non renewable sources have the same distribution
 
 ```{r}
@@ -456,14 +422,18 @@ p_val <- sum(T_stat>=T0)/B
 p_val
 ```
 
+We reject the null hypothesis so we can state that at least one of them has a different distribution from the others.
 
-Non-renewables coupled permutational tests
+
+To investigate whether the difference was in their means we proceeded with 3 coupled permutational tests using the squared Euclidean distance (i.e. sum of squared differences) between the two sample mean vectors
+
+Non-renewables coupled permutational tests:
 ```{r}
 
 # H0: Distributions are equal
 # H1: Distributions are not equal
 
-# NG vs OP ----------------------------------------------------------------
+# Natural Gas vs Oil&Petroleum ----------------------------------------------------------------
 
 n1 <- dim(consump.gas.countries)[1]
 n2 <- dim(consump.oil.petr.countries)[1]
@@ -513,7 +483,7 @@ p_val
 
 ```{r}
 
-# FF vs OP ----------------------------------------------------------------
+# Fossil Fuels vs Oil&Petroleum ----------------------------------------------------------------
 
 n1 <- dim(as.matrix(consump.fossils.countries))[1]
 n2 <- dim(as.matrix(consump.oil.petr.countries))[1]
@@ -564,7 +534,7 @@ p_val
 
 ```{r}
 
-# NG vs FF ----------------------------------------------------------------
+# Natural Gas vs Fossil Fuels ----------------------------------------------------------------
 
 n1 <- dim(as.matrix(consump.fossils.countries))[1]
 n2 <- dim(as.matrix(consump.gas.countries))[1]
@@ -612,14 +582,18 @@ p_val
 
 ```
 
-We never reject the null hypothesis so we can assume that in average the 3 non-renewable sources are decreasing at the same rate.
+We never reject the null hypothesis so we can assume that in average the three non-renewable sources are decreasing at the same rate.
 
+This result gave us the possibility to compare renewable energies with the average of non-renewable ones. 
 
-Does the renewable consumption growth follow the same distribution as the non renewable decrease?
+In particular we wanted to know if the renewable consumptions are increasing as fast as the non-renewable consumptions are decreasing.
+To do so we performed a permutational test using the same statistics as before so considering the distance between the means of year to year variations of consumptions, so we made a test over the first derivatives.
+
+In particular we changed sign of non-renewable year to year differences to proceed comparing if the two curves are moving at the same rate.
 ```{r}
 
-# RE vs Non-RE ----------------------------------------------------------------
-# Use year by year change of each energy
+# Renewables vs Non-Renewables ----------------------------------------------------------------
+# Use year by year variations of each energy
 
 mean.consump.nonrenew <-(consump.fossils.countries+consump.gas.countries+consump.oil.petr.countries )/3
 mean.consump.nonrenew.mean=colMeans(mean.consump.nonrenew)
@@ -692,8 +666,7 @@ p_val
 
 ```
 
-
-
+Since we do not reject the null hypothesis of same growth rate we can effectively conclude that, in average, the renewable consumptions are increasing as fast as the non-renewable consumptions are decreasing.
 
 ## Second Target: Investigate how electricity production coming from renewable sources is growing
 
@@ -731,11 +704,12 @@ matplot(colnames(use_renew_elec),t(use_renew_elec[4:40,]),type='l',xlab="Year",y
 
 ```
 
-Let's see which country is particularly above the others in total usage of renewables for electricity production
+Let's see, out of curiosity, which country is particularly above the others in total usage of renewables for electricity production
 
 ```{r}
 rownames(use_renew_elec)[which.max(use_renew_elec[4:40,16])+3] #first three rows are total european statistics
 ```
+
 Let's construct a dataset with percentage of electricity coming from renewables to visualize its evolution at a European level
 ```{r}
 elec_percentage <- tot_elec
@@ -751,9 +725,11 @@ plot(years_04_19,as.numeric(elec_percentage[2,]),main="Percentage of electricity
 points(years_04_19,as.numeric(elec_percentage[2,]),col="Green",lwd=3)
 ```
 
+Fortunately it is clearly ramping up!
 
+### MANOVA to compare the distributions from the three main types of Renewables for electricity consumption
 
-### MANOVA to compare the distributions from the three main types of RE for electricity consumption
+We proceeded with a manova test, to investigate if the increase of electricity production coming from the three main renewable sources (Hydro, Wind, Solar) has the same distribution.
 
 Getting and preprocessing electricity data
 ```{r}
@@ -837,7 +813,7 @@ legend("topleft",legend=levels(source),col=c(1,2,3),pch=1)
 
 
 Seems like Hydro is uniformly more used than the other two.
-Seems like Hydro has less variations than the other two, let's proceed to statistically test this fact
+Seems like Hydro has less variations than the other two, let's proceed to statistically test this fact.
 
 Observed statistic:
 ```{r}
@@ -873,9 +849,9 @@ p_val <- sum(T_stat>=T0)/B
 p_val
 ```
 
-So here we have statistical evidence that the three main renewable sources have not the same growth distribution in terms of generated electricity.
+So here we have statistical evidence to say that at least one of the renewable electricity sources has different growth distribution from the others. 
 
-We can further investigate whether Solar and Wind are equally distributed (i.e. developing at the same rate) or not.
+As observed before, Hydro seems to be the principal source of renewable electricity and the one with less variations, so we proceeded investigating if the two other sources (Wind and Solar) are in average developing at the same rate.
 ```{r}
 wind.mean = colMeans(use_wind_elec.diff[4:40,])
 solar.mean = colMeans(use_solar_elec.diff[4:40,])
@@ -886,7 +862,7 @@ matplot(years_05_19,t(rbind(wind.mean,solar.mean)), type='l', col=c("green","red
 legend("topleft",legend=c("Wind","Solar"),col=c(3,2),pch=1)
 ```
 
-
+Two populations permutational test
 ```{r}
 n1 = n2=dim(use_wind_elec.diff[4:40,])[1]
 n  = n1 + n2
@@ -923,12 +899,13 @@ pvalue=sum(T2>=T20)/B
 pvalue
 ```
 
+In the end we have no statistical evidence to state that the two growth distribution are different.
 
-### Regression on types of RE for electricity production 
+### Regression on types of Renewables for electricity production 
 
 To understand how Hydro, Wind and Solar sources of electricity are growing with time we proceeded with some regression of the amount of electricity coming from each of them, in function of Gdp, population and their interaction. 
     
-For this purpose, we will first have to import the SSP data from our dataset, which was obtained by retrieving the year to year values from the original data (more details in "src/preprocessing_SSP.Rmd").
+For this purpose, we will first have to import the SSP data from our datasets, which was obtained by retrieving the year to year values from the original data (more details in "src/preprocessing_SSP.Rmd").
 
 We also construct variations datasets that will prove to be useful in the near future.
 
@@ -964,8 +941,10 @@ gdp[is.na(gdp)] <- 0 #replace NA with 0
 gdp.diff[is.na(gdp.diff)] <- 0 
 ```
 
+In particular we decided to work with total EU values.
+
 EU totals - original data
-For the moment we are trying to make regression for the three renewable electricity sources with original data
+For the moment we are trying to make regression for the three renewable electricity sources with original data.
 ```{r}
 # Not in SSP GDP data and in electricity data
 discard.idx <- rownames(use_solar_elec[-c(1,2,3),])%in%rownames(gdp)
@@ -997,7 +976,6 @@ pop.total <- as.numeric(colSums(pop))
 Montenegro and Albania should be discarded as they have NaN values or no information available for either population or GDP (see "preprocessing_SSP.Rmd"). Kosovo should be discarded as it is not recognized by the SSP predictions.
 
 
-
 Since we have data only from 2004 (instead of 1990) to 2019, more points are needed to construct regression models. We generate these points through a smoothing procedure, obtaining semestral data.
 
 
@@ -1011,7 +989,6 @@ use_hydro_elec.total.s <- smoothing_procedure(use_hydro_elec.total, 2004, 2019, 
 
 
 ```{r}
-#using EU total values
 gdp.elec.train <- gdp[,as.character(seq(2004,2019))]
 pop.elec.train <- pop[,as.character(seq(2004,2019))]
 gdp.elec.train = colSums(gdp.elec.train)
@@ -1042,7 +1019,7 @@ vec_train
 We first tried to construct models using original data and checked the correlation of the residuals using the (partial) autocorrelation function, obtaining as we will see high correlation values.
 
 
-Let's find the adequate models to use for conformal prediction
+Let's find the adequate models to use for our regression
 
 #### Wind model - original data
 ```{r}
@@ -1148,7 +1125,7 @@ pb$tick
 sum(T_perm>= T0)/B
 ```
 
-Let's also try to drop the population term
+Let's instead try to drop the population term
 ```{r}
 T0 <- summary.aov(aov(gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + +s(I(gdp*pop),bs='cr'),data=tr_data)))[[1]][2,4]
 
@@ -1257,7 +1234,7 @@ Pacf(model_gam$residuals)
 
 Differences are much needed...
 
-Since working with original data gave us residuals with high correlations, we decided to fit models using the year to year variations. We explot again GAM models to realize our regression task.
+Since working with original data gave us residuals with high correlations, we had to change strategy in order to tackle this problem: we looked for models to derive the year-to-year variations of each electricity source in function of GDP and population year-to-year variations and their interactions. 
 Each time we search for the best GAM model by looking at the significance of the covariates and the adjusted R squared.
 
 #### First order differences dataframes
@@ -1292,7 +1269,7 @@ use_hydro_elec.diff.c <- use_hydro_elec.diff.c[rn,]
 ```
 
 
-Smoothing for solar, wind and hydro to obtain semestral data (variations)
+Smoothing for solar, wind and hydro to obtain semestral data (yearly variations)
 ```{r}
 use_solar_elec.diff.s <- smoothing_procedure(use_solar_elec.diff.c, 2005, 2019, interval=2, row_names = rownames(use_solar_elec.diff.c))
 use_wind_elec.diff.s <- smoothing_procedure(use_wind_elec.diff.c, 2005, 2019, interval=2, row_names = rownames(use_wind_elec.diff.c))
@@ -1316,7 +1293,6 @@ use_hydro_elec.diff.total.s=t(data.frame(colSums(use_hydro_elec.diff.s)))
 
 
 ```{r}
-#using EU yearly variations
 gdp.elec.diff.train <- gdp.diff.total[,as.character(seq(2005,2019))]
 pop.elec.diff.train <- pop.diff.total[,as.character(seq(2005,2019))]
 ```
@@ -1349,7 +1325,6 @@ with(tr_data,plot(pop,European_Union,main="Wind diff electricity vs diff pop"))
 ```
 
 ```{r}
-
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1358,12 +1333,14 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+
 Let's try quitting one covariate at a time. We start quitting the interaction term (gaussian residuals)
 ```{r}
 model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_data)
 
 anova(model_gam_reduced,model_gam,test="F")
 ```
+
 Let's put back the interaction term and quit gdp
 
 ```{r}
@@ -1371,8 +1348,8 @@ model_gam_reduced=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),da
 
 anova(model_gam_reduced,model_gam,test="F")
 ```
-Let's put back gdp and quit population
 
+Let's put back gdp and quit population
 
 ```{r}
 model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
@@ -1381,8 +1358,10 @@ anova(model_gam_reduced,model_gam,test="F")
 
 ```
 
-Let's try quitting the smooth terms, one at a time
+Let's try quitting the smooth terms, one at a time. We exploit the lm command coupled with the bs generators to better investigate the adequate degree to use for the spline basis.
+
 ```{r}
+#linear interaction
 model_gam1=lm(European_Union ~ bs(gdp) + bs(pop) + gdp:pop,data=tr_data)
 
 summary(model_gam1)
@@ -1393,6 +1372,7 @@ shapiro.test(model_gam1$residuals)
 ```
 
 ```{r}
+#linear pop
 model_gam2=lm(European_Union ~ bs(gdp) + pop + bs(I(gdp*pop)),data=tr_data)
 
 summary(model_gam2)
@@ -1404,6 +1384,7 @@ shapiro.test(model_gam2$residuals)
 
 
 ```{r}
+#linear gdp
 model_gam3=lm(European_Union ~ gdp + bs(pop) + bs(I(gdp*pop)),data=tr_data)
 
 summary(model_gam3)
@@ -1464,12 +1445,15 @@ model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr'),data=tr_d
 anova(model_gam_reduced,model_gam,test="F")
 ```
 
+We cannot quit the interaction term
 
 ```{r}
 model_gam_reduced=gam(European_Union ~ s(gdp,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 anova(model_gam_reduced,model_gam,test="F")
 ```
+
+We cannot quit the population term
 
 ```{r}
 model_gam_reduced=gam(European_Union ~ s(pop,bs='cr') + s(I(gdp*pop),bs='cr') ,data=tr_data)
@@ -1478,9 +1462,12 @@ anova(model_gam_reduced,model_gam,test="F")
 
 ```
 
-Let's try quitting the smooth terms, one at a time
+We cannot quit the gdp term
+
+So,as before, let's try quitting the smooth terms, one at a time
 
 ```{r}
+#linear interaction
 model_gam1=lm(European_Union ~ bs(gdp) + bs(pop) + gdp:pop,data=tr_data)
 
 summary(model_gam1)
@@ -1491,6 +1478,7 @@ shapiro.test(model_gam1$residuals)
 ```
 
 ```{r}
+#linear pop
 model_gam2=lm(European_Union ~ bs(gdp) + pop + bs(I(gdp*pop)),data=tr_data)
 
 summary(model_gam2)
@@ -1502,6 +1490,7 @@ shapiro.test(model_gam2$residuals)
 
 
 ```{r}
+#linear gdp
 model_gam3=lm(European_Union ~ gdp + bs(pop) + bs(I(gdp*pop)),data=tr_data)
 
 summary(model_gam3)
@@ -1550,6 +1539,7 @@ shapiro.test(model_gam3$residuals)
 Let's get back to the complete model and now we try to quit two smooth terms at a time
 
 ```{r}
+#linear pop and interaction
 model_gam1=lm(European_Union ~ bs(gdp) + pop + gdp:pop,data=tr_data)
 
 summary(model_gam1)
@@ -1561,6 +1551,7 @@ shapiro.test(model_gam1$residuals)
 
 
 ```{r}
+#linear gdp and interaction
 model_gam2=lm(European_Union ~ gdp + bs(pop) + gdp:pop,data=tr_data)
 
 summary(model_gam2)
@@ -1571,6 +1562,7 @@ shapiro.test(model_gam2$residuals)
 ```
 
 ```{r}
+#linear gdp and pop
 model_gam3=lm(European_Union ~ gdp + pop + bs(I(gdp*pop)),data=tr_data)
 
 summary(model_gam3)
@@ -1606,8 +1598,8 @@ model_gam_reduced=lm(European_Union ~  pop,data=tr_data)
 
 anova(model_gam_reduced,model_gam3,test="F")
 ```
-We can quit gdp
 
+We can quit gdp
 
 ```{r}
 model_gam3=model_gam_reduced
@@ -1625,14 +1617,14 @@ summary(model_gam1)
 shapiro.test(model_gam1$residuals)
 ```
 
-Let's try to quit the gdp (gaussian residuals)
+from this model let's try to quit the gdp (gaussian residuals)
 ```{r}
 model_gam_reduced=lm(European_Union ~  pop + gdp:pop,data=tr_data)
 
 anova(model_gam_reduced,model_gam1,test="F")
 ```
 
-We can quit it
+We can quit the gdp
 ```{r}
 model_gam1=model_gam_reduced
 
@@ -1650,20 +1642,20 @@ model_gam_reduced=lm(European_Union ~  pop,data=tr_data)
 anova(model_gam_reduced,model_gam1,test="F")
 ```
 
-We obtain the same result as before so we should try with the second model
+We obtain the same result as before, so we should try with the second model
 ```{r}
 summary(model_gam2)
 shapiro.test(model_gam2$residuals)
 ```
 
-Let's try to quit the interaction
+Let's try to quit the interaction (gaussian residuals)
 ```{r}
 model_gam_reduced=lm(European_Union ~ gdp + bs(pop),data=tr_data)
 
 anova(model_gam_reduced,model_gam2,test="F")
 ```
 
-We quit it
+We quit the interaction
 ```{r}
 model_gam2=model_gam_reduced
 
@@ -1692,7 +1684,8 @@ qqnorm(model_gam2$residuals)
 shapiro.test(model_gam2$residuals)
 ```
 
-Let's try to explain the differences of hydro usage with original data of EU gdp and population
+Since all the efforts using variations datasets did not produce a satisfying model, let's try to explain the differences of hydro usage with original data of EU gdp and population.
+
 
 ```{r}
 #vectors for EU total data
@@ -1713,7 +1706,6 @@ with(tr_data,plot(pop,European_Union,main="Hydro diff electricity vs pop"))
 ```
 
 ```{r}
-
 model_gam=gam(European_Union ~ s(gdp,bs='cr') + s(pop,bs='cr') + s(I(gdp*pop),bs='cr'),data=tr_data)
 
 summary(model_gam)
@@ -1823,6 +1815,7 @@ hist(model_gam$residuals)
 qqnorm(model_gam$residuals)
 shapiro.test(model_gam$residuals)
 ```
+
 Let's try to quit pop (residuals are not gaussians)
 
 ```{r}
@@ -1864,6 +1857,7 @@ shapiro.test(model_gam$residuals)
 
 Let's try to quit one smooth term at a time
 ```{r}
+#linear interaction
 model_gam1=lm(European_Union ~ bs(gdp) + bs(pop) + gdp:pop,data=tr_data)
 
 summary(model_gam1)
@@ -1874,6 +1868,7 @@ shapiro.test(model_gam1$residuals)
 ```
 
 ```{r}
+#linear pop
 model_gam2=lm(European_Union ~ bs(gdp) + pop + bs(I(gdp*pop)),data=tr_data)
 
 summary(model_gam2)
@@ -1884,6 +1879,7 @@ shapiro.test(model_gam2$residuals)
 ```
 
 ```{r}
+#linear gdp
 model_gam3=lm(European_Union ~ gdp + bs(pop) + bs(I(gdp*pop)),data=tr_data)
 
 summary(model_gam3)
@@ -1925,16 +1921,24 @@ Acf(model_gam2$residuals)
 Pacf(model_gam2$residuals)
 ```
 
-High correlation in 1 step residuals but we stick with this model
+
+High correlation in 1 step residuals but still better than using original values, so we stick with this model
+
 ```{r}
 model_gam_solar=model_gam2
 ```
 
-Little review of the selected models
+#### Little review of the selected models
+
+1.	DIFF_EU_WIND ~ β0 + f(DIFF_EU _GDP) + DIFF_EU _POPULATION + f(DIFF_EU _GDP*DIFF_EU _POPULATION) +  ϵ
+
 ```{r}
 summary(model_gam_wind)
 
 ```
+
+
+2.	DIFF_EU _HYDRO ~ β0 + f(EU _GDP) + f(EU _POPULATION) + f(EU _GDP*EU _POPULATION)) + ϵ
 
 ```{r}
 summary(model_gam_hydro)
@@ -1942,6 +1946,7 @@ summary(model_gam_hydro)
 ```
 
 
+3.	DIFF_EU _SOLAR ~ β0 + f(DIFF_EU _GDP) + DIFF_EU _POPULATION + f(DIFF_EU _GDP*DIFF_EU _POPULATION) +  ϵ
 
 ```{r}
 summary(model_gam_solar)
@@ -1949,8 +1954,7 @@ summary(model_gam_solar)
 ```
 
 
-
-### Plots
+#### Plots
 
 Wind regression
 
@@ -1971,8 +1975,7 @@ with(vec_train_wind, points3d(gdp,pop,use_wind_elec.diff.total.s,col='black',siz
 ```
 
 
-
-Yearly wind evolution
+Wind yearly evolution
 ```{r}
 plot(seq(2005,2019,0.5), use_wind_elec.diff.total.s,cex =.5,xlab="Year",ylab="Terajoules",col =" darkgrey ",main='Wind Diff Electricity Use')
 
@@ -2043,6 +2046,8 @@ We can clearly see that the electricity production coming from renewable sources
 
 ## Third Target: Analyse the current European renewable energy network.
 
+One of the most important indicator to analyze if we are moving towards a “green future” is to investigate whether electricity power coming from renewable sources would be enough to satisfy picks of electricity demand, i.e. understand if the renewable energy network has sufficient production capacity, in terms of daily generated power (Megawatt).
+
 ### Regression on european electricity capacity
 
 Let's plot some trends
@@ -2077,7 +2082,7 @@ m_list=lapply(1:10,function(degree){lm(as.numeric(prod.by.fuel.comb.p[2,]) ~ pol
 do.call(anova,m_list)
 ```
 
-
+Theorethically we should choose grade 9, since it's the last significant model, but we don't want to overfit, so let's analyze lower degrees
 ```{r}
 summary(m_list[[2]])
 ```
@@ -2107,7 +2112,7 @@ plot(years_90_19,as.numeric(prod.by.fuel.comb.p[2,]),main="European Non Renewabl
 lines(years_90_19,m_list[[6]]$fitted.values,col="red")
 ```
 
-Third grade polynomial regression seems reasonable (theorethically we should choose grade 9, since it's the last significant model: 10th grade regression is not significant)
+Third grade polynomial regression seems reasonable
 
 ```{r}
 comb_model=m_list[[3]]
@@ -2123,26 +2128,34 @@ plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Ele
 m_list=lapply(1:10,function(degree){lm(as.numeric(prod.by.fuel.renew[2,]) ~ poly(as.numeric(years_90_19),degree=degree))})
 do.call(anova,m_list)
 ```
+
+Again, we don't want to overfit
+
 ```{r}
 summary(m_list[[2]])
 
 ```
+
 ```{r}
 summary(m_list[[4]])
 
 ```
+
 ```{r}
 summary(m_list[[7]])
 
 ```
+
 ```{r}
 plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
 lines(years_90_19,m_list[[2]]$fitted.values,col="green")
 ```
+
 ```{r}
 plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
 lines(years_90_19,m_list[[4]]$fitted.values,col="green")
 ```
+
 
 ```{r}
 plot(years_90_19,as.numeric(prod.by.fuel.renew[2,]),main="European Renewable Electricity Capacity",xlab="Year",ylab="Megawatt")
@@ -2150,7 +2163,7 @@ lines(years_90_19,m_list[[7]]$fitted.values,col="green")
 ```
 Since by passing to fourth grade we only add one parameter w.r.t second grade (third grade coefficient is considered zero), we can consider the fourth grade regression.
 
-But we can notice that the coefficient of fourth grade is negative! It's not really reasonable for future predictions, so we stick to second grade
+But we can notice that the coefficient of fourth grade is negative! It's not really reasonable for future developments, so we stick to second grade
 
 
 ```{r}
@@ -2175,7 +2188,7 @@ matlines (anni ,se.bands ,lwd =1, col =" green",lty =3)
 legend("topleft",legend=c("Non-renewable","Renewable"),col=c(2,3),pch=1)
 ```
 
-Let's try with quadratic spline regression
+Let's also try with quadratic spline regression, with 5 knots evenly spaced, since a local approach should better captures the temporal local variations
 ```{r}
 #combustible fuels
 b=data.frame(cap=as.numeric(prod.by.fuel.comb.p[2,]),years_b=years_90_19)
@@ -2207,7 +2220,7 @@ lines(anni,preds$fit ,lwd =2, col =" green")
 matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
 ```
 
-Natural splines
+Natural cubic splines
 ```{r}
 comb_model_spline <- lm(cap ~ ns(years_b, df=8), data=b )
 dat_b=data.frame(years_b=anni)
@@ -2234,12 +2247,12 @@ lines(anni,preds$fit ,lwd =2, col =" green")
 matlines(anni, se.bands ,lwd =1, col =" green",lty =3)
 ```
 
-Natural cubic splines seems the best approach, it better captures all the local variations.
+Natural cubic splines seems the best approach.
 
 
 ### ANOVA test on 2019 capacities, dividing Europe in four regions
 
-Now we set a region-based analysis of electricity capacity
+Now we set a region-based analysis of electricity capacity: we looked for different development of the renewable network in the four regions of Europe (North, East, South and Centre) with an anova test on 2019 relative capacities. These quantities were computed as the ratio between renewable and total capacities in order to take into account the country dimension. 
 
 ```{r}
 
@@ -2273,58 +2286,6 @@ colnames(aov_no_nuclear)=c("cap_19","Region")
 aov_no_nuclear$Region=factor(aov_no_nuclear$Region)
 ```
 
-Proceed with anova test
-```{r}
-attach(aov_no_nuclear)
-g=nlevels(aov_no_nuclear$Region)
-g
-boxplot(as.numeric(cap_19) ~ Region,col=rainbow(g),main="Electricity capacity by region",ylab="Megawatt")
-```
-
-```{r}
-cap_19=as.numeric(cap_19)
-fit <- aov(cap_19 ~ Region)
-T0 <- summary(fit)[[1]][1,4]
-
-B=10000
-T_stat <- numeric(B) 
-n <- dim(aov_no_nuclear)[1]
-set.seed(seed)
-
-for(perm in 1:B){
-  # Permutation:
-  permutation <- sample(1:n)
-  cap_perm <- cap_19[permutation]
-  fit_perm <- aov(cap_perm ~ Region)
-  
-  # Test statistic:
-  T_stat[perm] <- summary(fit_perm)[[1]][1,4]
-}
-```
-
-```{r}
-hist(T_stat,xlim=range(c(T_stat,T0)),breaks=30)
-abline(v=T0,col=3,lwd=2)
-
-plot(ecdf(T_stat),xlim=c(-1,20))
-abline(v=T0,col=3,lwd=4)
-
-# p-value
-p_val <- sum(T_stat>=T0)/B
-p_val
-```
-
-With aovp?
-```{r}
-library(lmPerm)
-lmp=aovp(cap_19 ~ Region,perm="Prob",Cp=1e-6) 
-summary(lmp)
-detach(aov_no_nuclear)
-#pretty much same result
-```
-Again, we don't have statistical evidence to say that electricity capacities from renewables have different distribution in the four regions of Europe.
-This is not a meaningful result, since we are not taking into account the sizes of countries. It's better to analyze a relative quantity, like the ratio between renewable and total capacity!
-
 Let's build the ad-hoc dataframe with relative capacities of 2019
 ```{r}
 north=prod.by.fuel.renew.countries[match(north_europe,countries),30]/(prod.by.fuel.total.p[4:38,][match(north_europe,countries),30])
@@ -2351,6 +2312,7 @@ g=nlevels(aov_ratio_cap$Region)
 g
 boxplot(as.numeric(ratio_cap_19) ~ Region,col=c("cyan1","indianred1","cornflowerblue","chartreuse1"),main="Relative renewable electricity capacity by region",ylab="Percentage")
 ```
+
 ```{r}
 ratio_cap_19=as.numeric(ratio_cap_19)
 fit <- aov(ratio_cap_19 ~ Region)
@@ -2378,17 +2340,25 @@ plot(ecdf(T_stat),xlim=c(-1,20),main="F stat permutational ecdf")
 abline(v=T0,col=3,lwd=4)
 
 # p-value
-p_val <- sum(T_stat>=T0)/B
-p_val
+sum(T_stat>=T0)/B
 detach(aov_ratio_cap)
 ```
 
-Still no statistical evidence of different development in different regions
+No statistical evidence of different development in different regions.
+
+So to conclude this third analysis step, we can state, from the above results, that electricity capacity coming from renewable sources has surpassed non-renewable one around 2016 and that this improvement is uniformly distributed across the four regions of Europe since there is no evidence to say that a certain region is doing better thanthe other ones.
+
+
+So the conclusion of the start point analysis is that:
+“Europe is effectively undertaking a renewable transition... but is it fast enough?”
+
+
+To answer to this question we are ready to enter in the core of our project that is to construct a robust model to predict future european Greenhouse gases emissions.
 
 # Core: Model to predict future european GHG emissions
 We have set ourselves the goal of predicting whether the Green Deal target of a 55% cut in greenhouse gases emissions by 2030 with respect to 1990 levels is feasible.
 
-With the target to develop a model to predict future Greenhouse gases emissions as a function of the other energy indicators we had to previously construct a variety of auxiliar models to predict covariates values to be used in the final model.
+With the target to develop a model to predict future Greenhouse gases emissions as a function of the other energy indicators we had to previously construct a variety of auxiliary models to predict covariates values to be used in the final model.
 
 
 Keeping only European countries for which we have complete data of Gdp, Population and Energy consumptions.
@@ -2397,7 +2367,7 @@ Keeping only European countries for which we have complete data of Gdp, Populati
 discard.idx <- rownames(consump.oil.petr.diff[-c(1,2,3),])%in%rownames(gdp.diff)
 discard.pop.idx <- rownames(pop.diff)%in%rownames(gdp.diff)
 
-# We smooth the non-renewable data to obtain values for each month of each year
+# Countries dataframe
 consump.oil.petr.diff.s <- consump.oil.petr.diff[-1,]
 consump.fossils.diff.s <- consump.fossils.diff[-1,]
 consump.gas.diff.s <- consump.gas.diff[-1,]
@@ -2406,11 +2376,7 @@ colnames(consump.oil.petr.diff.s) <- consump.oil.petr.diff[1,]
 colnames(consump.fossils.diff.s) <- consump.fossils.diff[1,]
 colnames(consump.gas.diff.s) <- consump.gas.diff[1,]
 
-consump.oil.petr.diff.s <- smoothing_procedure(consump.oil.petr.diff.s, 1991, 2019,interval=1, row_names = rownames(consump.oil.petr.diff.s))
-consump.gas.diff.s <- smoothing_procedure(consump.gas.diff.s, 1991, 2019,interval=1, row_names = rownames(consump.gas.diff.s))
-consump.fossils.diff.s <- smoothing_procedure(consump.fossils.diff.s, 1991, 2019, interval=1,row_names = rownames(consump.fossils.diff.s))
-
-# We discard the countries which are not going to be used, as well as the EU totals 
+# EU totals vectors
 consump.oil.petr.diff.total <- consump.oil.petr.diff[3,]
 consump.gas.diff.total <- consump.gas.diff[3,]
 consump.fossils.diff.total <- consump.fossils.diff[3,]
@@ -2431,15 +2397,14 @@ pop.diff.total<-as.numeric(colSums(pop.diff,na.rm=T))[1:40]
 ```
 
 
+Since we are working with time series, where there is a strong temporal dependence, from now on each time we are constructing a model we check the correlation of the residuals using the (partial) autocorrelation function. This is important to understand whether the model is able to capture the relations in original data or whether it is better to perform a first order differentiation to mitigate the natural collinearity problem of these datasets. With this idea in mind, we initially fit the models with original data and then saw whether it is necessary or not to switch to yearly variations.
 
 
-
-Since we are working with time series, where there is a strong temporal dependence, from now on each time we are constructing a model we check the correlation of the residuals using the (partial) autocorrelation function. This is important to understand whether the model is able to capture the relations in original data or whether it is better to perform a first order differentiation to mitigate the natural collinearity problem of these datasets. With this idea in mind, we initially fit the models with original data and then saw whether it is necessary or not to switch to the yearly variations.
-
+The first auxiliary models we fit aim to point predict year-to-year differences of the total European consumption from the three non-renewable sources (oil and petroleum products, solid fossil fuels and natural gas) in function of gdp, population and their interaction.
 
 ## EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
 
-Includes three models, one for each non-renewable energy:
+This section includes three models, one for each non-renewable energy:
     - EU_PETROLEUM  ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
     - EU_SOLID FOSSIL FUELS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
     - EU_NATURAL GAS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
@@ -2573,7 +2538,7 @@ shapiro.test(consump.gas.gam$residuals)
 Let's try to quit the interaction (residuals are gaussian, but simple anova doesn't work)
 ```{r}
 gas_reduced=gam(gas_eu ~ s(pop_eu,bs='cr') + s(gdp_eu,bs='cr'),data=vec_gas)
-anova(gas_reduced,consump.gas.gam,test="F")
+anova(gas_reduced,consump.gas.gam,test="F") #doesn't print p_value!
 ```
 
 ```{r}
@@ -2652,9 +2617,8 @@ Since the correlations are not negligible, we pass to first order differences
 
 ## DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
 
-Includes three models, one for each non-renewable energy:
     - DIFF_EU_PETROLEUM  ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
-    - DIFF_EU_SOLID FOSSIL FUELS ~ DIFF_EU_GDP + DIFF_EU_POPULATION +                                                                            DIFF_EU_GDP:DIFF_EU_POPULATION
+    - DIFF_EU_SOLID FOSSIL FUELS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
     - DIFF_EU_NATURAL GAS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
 
 ```{r}
@@ -2719,6 +2683,7 @@ hist(consump.oil.petr.gam$residuals)
 qqnorm(consump.oil.petr.gam$residuals)
 shapiro.test(consump.oil.petr.gam$residuals)
 ```
+
 We try to quit the interaction term (residuals are gaussian, but simple anova doesn't work)
 
 ```{r}
@@ -2776,9 +2741,10 @@ qqnorm(consump.oil.petr.gam$residuals)
 shapiro.test(consump.oil.petr.gam$residuals)
 ```
 
-We now test whether the smooth function is needed for the covariates or if it is sufficient (or even better...) to consider a linear relationship
+Let's try to quit the smooth terms, one at a time
 
 ```{r}
+#linear interaction
 consump.oil.petr.gam.1 <- lm(dif_oil_eu ~ bs(dif_gdp_eu) + bs(dif_pop_eu) + dif_gdp_eu:dif_pop_eu,data = vec_oil.diff) 
 
 summary(consump.oil.petr.gam.1)
@@ -2788,6 +2754,7 @@ qqnorm(consump.oil.petr.gam.1$residuals)
 shapiro.test(consump.oil.petr.gam.1$residuals)
 ```
 ```{r}
+#linear pop
 consump.oil.petr.gam.2 <- lm(dif_oil_eu ~ bs(dif_gdp_eu) + dif_pop_eu + bs(I(dif_gdp_eu*dif_pop_eu)),data = vec_oil.diff) 
 
 summary(consump.oil.petr.gam.2)
@@ -2798,6 +2765,7 @@ shapiro.test(consump.oil.petr.gam.2$residuals)
 ```
 
 ```{r}
+#linear gdp
 consump.oil.petr.gam.3 <- gam(dif_oil_eu ~ dif_gdp_eu + bs(dif_pop_eu)+ bs(I(dif_gdp_eu*dif_pop_eu)),data = vec_oil.diff) 
 
 summary(consump.oil.petr.gam.3)
@@ -2807,7 +2775,7 @@ qqnorm(consump.oil.petr.gam.3$residuals)
 shapiro.test(consump.oil.petr.gam.3$residuals)
 ```
 
-The third one seems promising, let's try to quit pop from it (residuals are gaussian)
+The third one seems promising, let's try to quit population from it (residuals are gaussian)
 
 ```{r}
 oil_reduced=lm(dif_oil_eu ~ dif_gdp_eu + bs(I(dif_gdp_eu*dif_pop_eu)),data = vec_oil.diff)
@@ -2922,7 +2890,7 @@ Pacf(
 )
 ```
 
-
+Note that it is quite strange that we should not reject the null hypothesis of the fundamental test of significance, while we reject the null hypothesis of the singular tests. Since the p-value of the fundamental test is just slightly above 0.05, we overlook this fact and consider this as the final model for the oil and petroleum products.
 
 ### Fossils
 
@@ -2941,6 +2909,7 @@ hist(consump.fossils.gam$residuals)
 qqnorm(consump.fossils.gam$residuals)
 shapiro.test(consump.fossils.gam$residuals)
 ```
+
 Let's try to quit the interaction (residuals are gaussian)
 
 ```{r}
@@ -2988,7 +2957,7 @@ p_val=sum(T_perm>= T0)/B
 p_val
 ```
 
-We can quit it
+We can quit gdp
 ```{r}
 consump.fossils.gam <- gam(dif_fossil_eu ~ s(dif_pop_eu,bs='cr'),data = vec_fossil.diff) 
 
@@ -3064,9 +3033,11 @@ hist(consump.gas.gam$residuals)
 qqnorm(consump.gas.gam$residuals)
 shapiro.test(consump.gas.gam$residuals)
 ```
+
 Let's try again with some linear contributions
 
 ```{r}
+#linear interaction
 consump.gas.gam.1 <- lm(dif_gas_eu ~ bs(dif_gdp_eu) + bs(dif_pop_eu) + dif_gdp_eu:dif_pop_eu,
                            data = vec_gas.diff) 
 summary(consump.gas.gam.1)
@@ -3077,6 +3048,7 @@ shapiro.test(consump.gas.gam.1$residuals)
 ```
 
 ```{r}
+#linear pop
 consump.gas.gam.2 <- lm(dif_gas_eu ~ bs(dif_gdp_eu) + dif_pop_eu + bs(I(dif_gdp_eu*dif_pop_eu)),
                            data = vec_gas.diff) 
 summary(consump.gas.gam.2)
@@ -3087,6 +3059,7 @@ shapiro.test(consump.gas.gam.2$residuals)
 ```
 
 ```{r}
+#linear gdp
 consump.gas.gam.3 <- lm(dif_gas_eu ~ dif_gdp_eu + bs(dif_pop_eu) + bs(I(dif_gdp_eu*dif_pop_eu)),
                            data = vec_gas.diff) 
 summary(consump.gas.gam.3)
@@ -3095,7 +3068,7 @@ hist(consump.gas.gam.3$residuals)
 qqnorm(consump.gas.gam.3$residuals)
 shapiro.test(consump.gas.gam.3$residuals)
 ```
-From the third, let's try to quit the interaction (residuals are gaussian, but simple anova doesn't work)
+From the third one, let's try to quit the interaction (residuals are gaussian, but simple anova doesn't work)
 
 
 ```{r}
@@ -3186,6 +3159,7 @@ shapiro.test(consump.gas.gam.3$residuals)
 We quit two smooth terms at a time
 
 ```{r}
+#linear pop and interaction
 consump.gas.gam.1 <- lm(dif_gas_eu ~ bs(dif_gdp_eu) + dif_pop_eu + dif_gdp_eu:dif_pop_eu,
                            data = vec_gas.diff) 
 summary(consump.gas.gam.1)
@@ -3196,6 +3170,7 @@ shapiro.test(consump.gas.gam.1$residuals)
 ```
 
 ```{r}
+#linear gdp and interaction
 consump.gas.gam.2 <- lm(dif_gas_eu ~ dif_gdp_eu + bs(dif_pop_eu) + dif_gdp_eu:dif_pop_eu,
                            data = vec_gas.diff) 
 summary(consump.gas.gam.2)
@@ -3206,6 +3181,7 @@ shapiro.test(consump.gas.gam.2$residuals)
 ```
 
 ```{r}
+#linear gdp and pop
 consump.gas.gam.3 <- lm(dif_gas_eu ~ dif_gdp_eu + dif_pop_eu + bs(I(dif_gdp_eu*dif_pop_eu)),
                            data = vec_gas.diff) 
 summary(consump.gas.gam.3)
@@ -3215,7 +3191,7 @@ qqnorm(consump.gas.gam.3$residuals)
 shapiro.test(consump.gas.gam.3$residuals)
 ```
 
-From the third let's try to quit the interaction (residuals are not gaussian)
+From the third one let's try to quit the interaction (residuals are not gaussian)
 
 ```{r}
 T0 <- summary.aov(aov(lm(dif_gas_eu ~ dif_gdp_eu + dif_pop_eu + bs(I(dif_gdp_eu*dif_pop_eu)),
@@ -3330,6 +3306,7 @@ consump.gas.gam=consump.gas.gam.1
 
 ### Predictions for 2020-2030
 ```{r}
+#summary of the three models
 summary(consump.oil.petr.gam)
 summary(consump.fossils.gam)
 summary(consump.gas.gam)
@@ -3401,6 +3378,7 @@ lines(seq(1991,2030),rep(0,length(seq(1991,2030))),lty=2,lwd=1,col =" darkgrey "
 
 We proceeded with yearly variations framework also for the following models
 
+The second auxiliary model we fit is the one that finds a relationship between the renewable energy consumptions and the non-renewable ones.
 
 ## DIFF_EU_RENEWABLE CONSUMPTIONS  ~ DIFF_EU_PETROLEUM  + DIFF_EU_SOLID FOSSILFUELS + DIFF_EU_NATURAL GAS + interactions
 
@@ -3473,7 +3451,7 @@ Acf(consump.renew.gam$residuals)
 Pacf(consump.renew.gam$residuals)
 ```
 
-
+Unfortunately we have correlated residuals at one step, but as before we think this is due to the smoothing we had to apply in order to fit this model.
 
 ### Predictions for 2020-2030
 ```{r}
@@ -3524,10 +3502,9 @@ renew.predictions=renew.predictions[1,as.character(seq(2020,2030))]
 (renew.predictions.total=consump.renew.europe[,30]+cumsum(as.numeric(renew.predictions)))
 ```
 
+Having fit these auxiliary models, we could develop our final model for the prediction of future variations of Greenhouse gases emissions, until 2030. 
 
 ## DIFF_TOTAL_GHG ~  DIFF_TOTAL_RENEWABLE CONSUMPTION
-
-
 
 ```{r}
 ghg=read.xlsx("data/ghg_emissions.xlsx", sheet=3, colNames=F)
@@ -3591,7 +3568,7 @@ qqnorm(ghg.gam$residuals)
 shapiro.test(ghg.gam$residuals)
 ```
 
-The gam machinery suggest us that it is sufficient a simple linear model!
+The gam machinery suggest us that it is sufficient to use a simple linear model!
 ```{r}
 ghg.l <- lm(value_ghg ~ value_re, data=vec_ghg.diff)
 
@@ -3644,7 +3621,7 @@ lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
 
 
 ```{r}
-
+#predicted decrease
 deltas=as.numeric(ghg.l.preds$fit)
 Percentage_emissions=ghg[30,1]+cumsum(deltas)
 Percentage_decrease=as.numeric(100-Percentage_emissions[11])
@@ -3654,7 +3631,7 @@ Percentage_decrease
 
 ```
 
-A cut of 32.32% is expected with the actual rhythm, so more effort is needed in order to comply with the Green Deal objective!
+A cut of 32.32% is expected with the actual rhythm, so much more effort is needed in order to comply with the Green Deal objective!
 
 
 ```{r}
@@ -3720,8 +3697,13 @@ lines(seq(2020,2030),lo_perc,col="green",lty=2)
 lines(seq(2020,2030),up_perc,col="green",lty=2)
 ```
 
-
 # Robustness
+
+In our project, we wanted to include a part about robustness methods applied to our datasets. Even though during the course’s lectures all the methods regarding robust statistics were applied to multivariate datasets with no temporal correlation, some of the concepts can be used in our project to try to infer more information on our dataset.
+
+Two specific methods were used in our code: Minimum Covariance Determinant and Robust regression.
+
+WARNING: during this section, when talking about energy datasets, we are using the year-to-year differences unless specified otherwise
 
 ```{r echo = T, results = 'hide'}
 library(robustbase)
@@ -3737,7 +3719,7 @@ library(RobStatTM)
 
 ## a. Test for COUNTRY outliers in diff dataset 
 
-Objective: Try to spot the most extreme cases (countries) in our dataset(s), where our model could struggle the most when trying to predict future values. 
+Objective: Try to spot the most extreme cases (countries) in our dataset(s), where our tests could struggle the most. 
 
 ```{r}
 # Standarization on differences of each country since MCD depends on Mahalannobis distance 
@@ -3769,29 +3751,11 @@ alpha <- .75
 
 
 ### a.1. For Non-renewable energy consumption
-Using Fossil fuels, Oil & petroleum and Natural Gas
-```{r}
-## N -> countries
-## p -> each year
-# (E.g. on Fossil fuels consumption)
 
-# WARNING: We expect to obtain bad results since MCD handles p > n problems badly
-
-# fit_MCD.1 <- covMcd(x = consump.fossils.diff.s, alpha = .75, nsamp = "best")
-fit_MCD.1 <- covMcd(x = sd.consump.ff.diff, alpha = alpha, nsamp = "best")
-
-mcd_best.1 <- fit_MCD.1$best
-
-N <- nrow(consump.fossils.diff.s)
-p <- ncol(consump.fossils.diff.s)
-plot(consump.fossils.diff.s[,1:5], col=ifelse(1:N%in%mcd_best.1,"black","red"),pch=19)
-
-# Which are the outliers?
-rownames(consump.fossils.diff.s)[!(1:N%in%mcd_best.1)]
-# And the cases considered outliers from distance plots?
-rownames(consump.fossils.diff.s)[!(fit_MCD.1$mcd.wt)]
-```
-
+This approach consists in representing each country as an independent sample of p dimensions, but this time, p corresponds to the value of each energy type for each year (N=Countries, p=energy sources).
+This would mean we would obtain several country outliers for each year. A possible approach to join the information on outliers for all years would be counting how many times each country has been classified as an outlier. This way we would obtain a rank of the most outlying countries in our dataset.
+Since for MCD to be applied we need a multivariate dataset, we need to combine at least two energy sources.
+We try this method on the Non-Renewable energy sources (Fossil fuels, Oil & Petroleum and Natural Gas). 
 
 ```{r}
 ## N -> countries
@@ -3843,7 +3807,7 @@ nr_outliers_mcd <- function(year, alpha=.75,plott=F){
 }
 
 # Test for 1991
-nr_outliers_mcd(1991)
+nr_outliers_mcd(1991,plott=T)
 nr_outliers_mcd(1992)
 
 outliers <- NULL
@@ -3873,91 +3837,18 @@ plot(fit_MCD.2, classic=TRUE)
 
 ```
 
-### a.2. For Renewable energy consumption 
-Using renwable differences
-```{r}
-## N -> countries
-## p -> each year
-# (On the renewable levels)
+This section is quite useful from an analytic point of view, but not quite for our Core part of the project, since we use no specific country information in our final prediction models.
 
-# WARNING: We expect to obtain bad results since MCD handles p > n problems badly
-
-fit_MCD.3 <- covMcd(x = sd.consump.renew.diff, alpha = alpha, nsamp = "best")
-
-mcd_best.3 <- fit_MCD.3$best
-
-N <- nrow(sd.consump.renew.diff)
-p <- ncol(sd.consump.renew.diff)
-plot(sd.consump.renew.diff[,1:5], col=ifelse(1:N%in%mcd_best.3,"black","red"),pch=19)
-
-# Which are the outliers?
-rownames(sd.consump.renew.diff)[!(1:N%in%mcd_best.3)]
-
-```
-
-We cannot repeat the experiment with N coutnries and each dimension being teh renewable sources, since this would be a univariate dataset, where MCD cannot be applied
-
-### a.3. For extra-covariates GDP & Population
-
-The "each year as a dimension" model, as in a1 and a2 will not be skipped.
-
-
-```{r}
-## N -> countries
-## p -> 2 (population + gdp)
-# (E.g. for 1991)
-
-gdpp_outliers_mcd <- function(year, alpha=.75, plott=F){
-    year <- 2020-year
-    sd.gdpp.aux <- data.frame(cbind(sd.gdp.diff[,year], sd.pop.diff[,year])) # Combine all NR energy consumptions for 1991
-    colnames(sd.gdpp.aux) <- c("GDP", "POP") 
-    rownames(sd.gdpp.aux) <- rownames(sd.gdp.diff)
-    sd.gdpp.aux <- na.omit(sd.gdpp.aux)
-    
-    fit_MCD.aux <- covMcd(x = sd.gdpp.aux, alpha = alpha, nsamp = "best")
-    
-    mcd_best.aux <- fit_MCD.aux$best
-    
-    N <- nrow(sd.gdpp.aux)
-    p <- ncol(sd.gdpp.aux)
-    if(plott==T){
-        plot(fit_MCD.aux)
-    }
-    
-    # Which are the outliers?
-    return(rownames(sd.gdpp.aux)[!(fit_MCD.aux$mcd.wt)]) 
-}
-
-# Test for 1991
-gdpp_outliers_mcd(1991)
-gdpp_outliers_mcd(1992)
-
-outliers <- NULL
-for(i in 1991:2019){
-    outliers <- c(outliers, gdpp_outliers_mcd(i))
-}
-
-# Get 5 most repeated outlying countries in non-renewable energies
-outl_occ.gdpp <- table(outliers)
-outl_occ.sort.gdpp <- outl_occ.gdpp[order(outl_occ.gdpp, decreasing = T)]
-outl_occ.sort.gdpp[1:5] # Top 5 outliers
-
-
-### Plot
-gdpp_outliers_mcd(1994, plott=T)
-
-```
-
-
-## b.1. Test for YEAR outliers with predictions
 
 We wonder if it is also possible to search for outliers on the year axis. In particular, having a dataset composed of year to year differences of different energy sources (i.e. columns as years and rows as energy sources), we will try to detect which year(s) had anomalous data with respect to the rest of the data.
 
 This would mean transposing our data matrix (now the columns would be energy sources and the rows each of the years) and we treating each row as an observation for which we would want to detect outliers. This would be interpreted as years for which we had an anomalous growth (or decrease) wrt the rest of the years.
 
 
+A problem arises from this last proposal: should we include in the year axis the predicted values for future values? We will try both options, but we should take into account that NOT including the future values would mean we could try to extract the outliers from our original dataset and retrain our models from a “new” dataset.
+## b.1 Test for YEAR outliers with predictions
 
-### b.1.1. O&P + FF + NG (training + prediction)
+O&P + FF + NG (training + prediction)
 
 ```{r}
 nr.past.preds <- data.frame(
@@ -3996,65 +3887,10 @@ plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(fit_MCD.4$mcd.wt,"black","red
 ```
 There is a clear swamping effect going on since not all 9 years seem to be real outliers. The year with index 20 is a clear outlier while indices 16, 19 or 17 could also be considered as outliers, but by inspecting individual plots, does not look like it.
 
-### b.1.2. Renewable Energy consumption (training + prediction)
-
-REVIEW: Using GAM fitted values and not real train values!
-
-WARNING: "...However, as an estimator for univariate location and scale the MCD is
-outperformed by other methods (in terms of robustness and efficiency).
-Therefore the MCD is mainly useful for higher-dimensional data." ()[https://cseweb.ucsd.edu/~slovett/workshops/robust-statistics-2019/slides/donoho-multivariate.pdf]
-
-```{r}
-r.past.preds <- data.frame(
-    c(consump.renew.gam$fitted.values, consump.renew.gam.preds$fit))
-
-rownames(r.past.preds) <- c(seq(1991,2019,by=1/3), seq(2020,2030,by=1/3))
-colnames(r.past.preds) <- c("renewables")
-```
-
-```{r}
-## N -> each year 
-## p -> 1 (Renewable energy consumption) 
-alpha <- .75
-fit_MCD.5 <- covMcd(x = r.past.preds, alpha = alpha, nsamp = "best")
-plot(fit_MCD.5)
-
-# Which are the cases considered outliers from distance plots?
-rownames(r.past.preds)[!(fit_MCD.5$mcd.wt)]
-```
-
-
-
-### b.1.3. GHG (training + prediction)
-
-REVIEW: Using GAM fitted values and not real train values!
-
-WARNING: "...However, as an estimator for univariate location and scale the MCD is
-outperformed by other methods (in terms of robustness and efficiency).
-Therefore the MCD is mainly useful for higher-dimensional data." ()[https://cseweb.ucsd.edu/~slovett/workshops/robust-statistics-2019/slides/donoho-multivariate.pdf]
-
-```{r}
-ghg.past.preds <- data.frame(
-    c(ghg.l$fitted.values, ghg.l.preds$fit))
-
-rownames(ghg.past.preds) <- c(seq(1991,2019), seq(2020,2030))
-colnames(ghg.past.preds) <- c("ghg")
-```
-
-```{r}
-## N -> each year 
-## p -> 1 (Renewable energy consumption)
-alpha <- .75
-fit_MCD.6 <- covMcd(x = ghg.past.preds, alpha = alpha, nsamp = "best")
-plot(fit_MCD.6)
-
-# Which are the cases considered outliers from distance plots?
-rownames(ghg.past.preds)[!(fit_MCD.6$mcd.wt)]
-```
 
 ## b.2. Test for YEAR outliers without predictions
 
-Let's try to find outlying years from our NRE consumption data which is the base of our prediction models.
+Let's try to find outlying years from our Non-Renewable consumption data which is the base of our prediction models.
 After finding outlying years the idea is to retrain our models and compare them to our original ones.
 
 ### b.2.1. Outliers in NRE (training data)
@@ -4114,9 +3950,9 @@ To obtain future predictions for Renewable consumptions we must use the future p
 
 Both have been done already. With the second one we obtain 7 outliers, while with the first methodology we obtain 2. Inspecting the indiviudal graphs and the distance-distance plots, we can assume that it is better to choose the outliers detected in the current section since the 2011 and 2014 yearly NRE consumptions are much clearer outliers than extra ones detected in the b.1.1. section.
 
-We can infere that the extra outliers from section b.1.1. are selected as such because of the extra-centrality that the predictions of NRE consumptions add to the dataset. It is clear that a swamping effect is taking place because some variabilities are amplified and falsely tagged as outlying. 
+We can infer that the extra outliers from section b.1.1. are selected as such because of the extra-centrality that the predictions of NRE consumptions add to the dataset. It is clear that a swamping effect is taking place because some variabilities are amplified and falsely tagged as outlying. 
 
-### b.2.2. Redo DIFF_RE' ~ DIFF_NRE' model
+### b.2.2. Redo DIFF_RENEWABLES ~ DIFF_NONRENEWABLES model
 
 ```{r}
 # Join all energies for common DF
@@ -4224,7 +4060,7 @@ renew.predictions.rob=renew.predictions.rob[1,as.character(seq(2020,2030))]
 
 
 
-### b.2.3. Redo DIFF_GHG' ~ DIFF_RE' model
+### b.2.3. Redo DIFF_GHG ~ DIFF_RENEWABLES model
 
 Create train dataset from new predictions with renewable sources without outlying years
 ```{r}
@@ -4249,7 +4085,6 @@ shapiro.test(ghg.gam.2$residuals)
 ```
 
 The GAM machinery still suggest us to use a linear model, however unfortunately now the model is not significant at 5%.
-A linear model will result in exactly the same output since we are using a single regressor:
 
 ```{r}
 ghg.l.2 <- lm(value_ghg ~ value_re, data=vec_ghg.diff.2)
@@ -4262,9 +4097,6 @@ shapiro.test(ghg.l.2$residuals)
 
 ```
 
-
-
-
 ```{r}
 ghg.rob <- ghg.l.2
 
@@ -4272,11 +4104,7 @@ ghg.rob.preds <- predict(ghg.rob, newdata=vec_ghg_pred.diff.2, se=T)
 
 ```
 
-
-
-
-
-### b.2.4. Compare with original models
+### b.2.4. Comparison with original models
 
 Plot new vs past predictions of RE ~ NRE:
 ```{r}
@@ -4288,16 +4116,18 @@ seq.outl.s <- c(seq(1991,1990+outl.nre.train[1]-1, 1/3),
               seq(1990+outl.nre.train[2]+1, 2019, 1/3))
 
 # Plot previous predictions
-with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoule" , col =" darkgrey ",main='Prediction - Renewable Energy Consumption'))
-points(seq(2020,2030,1/3), consump.renew.gam.preds$fit ,cex=1, pch=24, col ="coral")
-lines(seq(1991,2019,1/3),consump.renew.gam$fitted.values,col="lightblue",lwd=1)
+with(vec_re, plot(seq(1991,2019) ,value_re ,xlim=c(1991,2030),cex=.5,xlab="Year",ylab="Terajoules" , col =" darkgrey ",main='Prediction - Renewable Energy Consumption'))
+points(seq(2020,2030,1/3), consump.renew.gam.preds$fit ,cex=1, pch=16, col ="blue")
+lines(seq(1991,2019,1/3),consump.renew.gam$fitted.values,col="blue",lwd=2)
 
 # Plot new "robust" predictions
-points(1990+outl.nre.train, vec_re$value_re[outl.nre.train], col =" black ") # Outliers
-points(seq(2020,2030,1/3), consump.renew.gam.preds.rob$fit ,cex=1, pch=25, col ="brown")
-lines(seq.outl.s,consump.renew.gam.rob$fitted.values,col="blue",lwd=1)
+points(1990+outl.nre.train, vec_re$value_re[outl.nre.train], col =" black ",pch=16) # Outliers
+points(seq(2020,2030,1/3), consump.renew.gam.preds.rob$fit ,cex=1, pch=17, col ="orchid")
+lines(seq.outl.s,consump.renew.gam.rob$fitted.values,col="orchid",lwd=2)
 
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),lwd=1,lty=2,col =" darkgrey ")
+
+legend("topright",legend=c("Old fit","New fit","Old predictions","New predictions","Outliers"),col=c("blue","orchid","blue","orchid","black"),pch=c(16,16,16,17,16))
 
 ```
 
@@ -4310,11 +4140,13 @@ se.bands.rob=cbind(ghg.reg.rob$fit +2* ghg.reg.rob$se.fit ,ghg.reg.rob$fit -2* g
 
 with(vec_ghg.diff,plot(value_re,value_ghg,main="Diff ghg vs diff renewables"))
 # Previous regression
-lines(newdata$value_re,ghg.reg$fit,col="darkgreen",lwd=2)
-matlines(newdata$value_re,se.bands,col="darkgreen",lwd=1,lty=2)
+lines(newdata$value_re,ghg.reg$fit,col="green",lwd=2)
+matlines(newdata$value_re,se.bands,col="green",lwd=1,lty=2)
 # New regression
-lines(newdata$value_re, ghg.reg.rob$fit, col="green", lwd=2)
-matlines(newdata$value_re, se.bands.rob, col="green", lwd=1, lty=2)
+lines(newdata$value_re, ghg.reg.rob$fit, col="darkgreen", lwd=2)
+matlines(newdata$value_re, se.bands.rob, col="darkgreen", lwd=1, lty=2)
+
+legend("topright",legend=c("Old regression","New regerssion"),col=c("green","darkgreen"),pch=c(16,16))
 
 ```
 
@@ -4323,15 +4155,16 @@ Plot new vs past predictions of GHG ~ RE:
 ```{r}
 # Plot previous predictions
 with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
-points(seq(2020,2030),ghg.l.preds$fit ,cex=0.5, pch=24, col ="coral")
-lines(seq(1991,2019),ghg.l$fitted.values,lwd=1,col="lightblue")
+points(seq(2020,2030),ghg.l.preds$fit ,cex=1, pch=16, col ="green")
+lines(seq(1991,2019),ghg.l$fitted.values,lwd=2,col="green")
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
 
 # Plot new "robust" predictions
 points(1990+outl.nre.train,vec_ghg.diff.2$value_ghg[outl.nre.train],xlim=c(1990,2030),cex =.5,col =" darkgrey ")
-points(seq(2020,2030),ghg.rob.preds$fit ,cex=0.5, pch=25, col ="brown")
-lines(seq.outl,ghg.rob$fitted.values,lwd=1,col="blue")
-lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
+points(seq(2020,2030),ghg.rob.preds$fit ,cex=1, pch=17, col ="darkgreen")
+lines(seq.outl,ghg.rob$fitted.values,lwd=2,col="darkgreen")
+
+legend("bottomright",legend=c("Old fit","New fit","Old predictions","New predictions"),col=c("green","darkgreen","green","darkgreen"),pch=c(16,16,16,17))
 
 ```
 
@@ -4349,19 +4182,23 @@ Percentage_decrease.rob
 
 Plot predictions
 ```{r}
-with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.5,xlab="Year",ylab="Percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
-points(seq(2020,2030),Percentage_emissions,cex=.5,pch=24,col="darkgreen")
-points(seq(2020,2030), Percentage_emissions.rob, cex=.5,pch=25,col="green")
-lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
+with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.7,xlab="Year",ylab="Percentage" ,pch=16, col =" darkgrey ",main='Prediction - Ghg Emissions'))
+points(seq(2020,2030),Percentage_emissions,cex=1,pch=16,col="red")
+points(seq(2020,2030), Percentage_emissions.rob, cex=1,pch=17,col="coral")
+lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="green",lty=2,lwd=2)
+
+legend("topright",legend=c("Old predictions","New predictions"),col=c("red","coral"),pch=16)
 ```
 
-
-
-
+Fortunately predictions look very similar to the ones made on the complete datasets, both visually and numerically.
 
 ## c. Robust linear models
 
 Idea: use Robust Linear models on our final predictor i.e. GHG ~ RE. This makes a lot of sense since our original model is a linear one. We expect for these models to act not too worse than the original lm. This means we will try to obtain inference by using this methods and our original data: NOT the "robust" dataset(s)
+
+We will be applying the Least Median Squares (LMS) and Least Trimmed Squares (LTS) models, covered during the course. For the former, we will use the lmsreg(.) function, while for the latter we will use the lmrob(.) function.
+
+Contrary to the course’s labs, we decide to use lmrob(.) instead of ltsReg(.) following the robustbase package documentation’s advice (ref): "We strongly recommend using lmrob(.) instead of ltsReg(.) 
 
 ### c.1. LMS + LTS on final model 
 
@@ -4374,6 +4211,7 @@ plot(vec_ghg.diff)
 
 Now, let's look how robust linear regressors act with this data and compare it with the original LM model:
 
+LMS
 ```{r}
 fit_lms <- lmsreg(value_ghg ~ value_re, data = vec_ghg.diff)
 
@@ -4388,9 +4226,7 @@ Acf(fit_lms$residuals,main="Residuals Acf")
 Pacf(fit_lms$residuals,main="Residuals Pacf")
 ```
 
-
-
-In the robustbase documentation we can find a note : "We strongly recommend using lmrob() instead of ltsReg [...]"
+LTS
 ```{r}
 fit_lts <- lmrob(value_ghg ~ value_re, data = vec_ghg.diff, alpha=.5)
 
@@ -4414,8 +4250,8 @@ sum(fit_lms$residuals^2)
 sum(fit_lts$residuals^2)
 
 
-summary(fit_lts)
 summary(ghg.l)
+summary(fit_lts)
 ```
 
 
@@ -4429,7 +4265,6 @@ newdata.rob =data.frame(value_re=newdata.rob)
 
 ghg.reg.lms=predict(fit_lms, newdata=newdata.rob, se=T)
 ghg.reg.lts=predict(fit_lts, newdata=newdata.rob, se=T)
-
 se.bands.lts=cbind(ghg.reg.lts$fit +2* ghg.reg.lts$se.fit ,ghg.reg.lts$fit -2* ghg.reg.lts$se.fit)
 ```
 
@@ -4441,14 +4276,14 @@ lines(newdata$value_re, ghg.reg$fit, col="green",lwd=2)
 matlines(newdata$value_re, se.bands,col="green",lwd=1,lty=2)
 
 lines(newdata.rob$value_re, ghg.reg.lms,col="blue",lwd=2)
-# matlines(newdata$value_re, se.bands.lms,col="green",lwd=1,lty=2)
 
-lines(newdata.rob$value_re, ghg.reg.lts$fit,col="lightblue",lwd=2)
-matlines(newdata.rob$value_re, se.bands.lts, col="lightblue",lwd=1,lty=2)
+lines(newdata.rob$value_re, ghg.reg.lts$fit,col="orchid",lwd=2)
+matlines(newdata.rob$value_re, se.bands.lts, col="orchid",lwd=1,lty=2)
 
+legend("topright",legend=c("Old fit","Lms","Lts"),col=c("green","blue","orchid"),pch=16)
 ```
 
-The LTS model seems to be very similar by looking at the graph above. And their Sum of Square residuals is also very close, while the LMS estimator yields a worse fit in our model
+The LTS model seems to be very similar by looking at the graph above. And their Sum of Square residuals is also very close, while the LMS estimator yields a worse fit of our data.
 
 But by looking at the Adjusted R-squared of the LM model, it has a higher value (0.13) than the LTS model (0.08).
 
@@ -4463,10 +4298,12 @@ with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.7,pch
 points(seq(2020,2030),ghg.l.preds$fit ,cex=0.7,pch=19, col ="green")
 lines(seq(1991,2019),ghg.l$fitted.values,lwd=2,col="green")
 # New predictions LTS
-points(seq(2020,2030),ghg.lts.preds$fit ,cex=0.7,pch=19, col ="lightblue")
-lines(seq(1991,2019),fit_lts$fitted.values,lwd=2,col="lightblue")
+points(seq(2020,2030),ghg.lts.preds$fit ,cex=0.7,pch=19, col ="orchid")
+lines(seq(1991,2019),fit_lts$fitted.values,lwd=2,col="orchid")
 
 lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
+
+legend("topright",legend=c("Old fit","Lts"),col=c("green","orchid"),pch=16)
 ```
 
 
@@ -4476,7 +4313,8 @@ deltas.lts=as.numeric(ghg.lts.preds$fit)
 Percentage_emissions.lts=ghg[30,1]+cumsum(deltas.lts)
 Percentage_decrease.lts=as.numeric(100-Percentage_emissions.lts[11])
 
-c(Percentage_emissions.lts, Percentage_emissions)
+Percentage_emissions.lts
+Percentage_emissions
 c(Percentage_decrease.lts, Percentage_decrease)
 
 ```
@@ -4486,6 +4324,7 @@ with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.
 points(seq(2020,2030),Percentage_emissions, cex=.7,col="red",pch=19)
 points(seq(2020,2030),Percentage_emissions.lts,cex=.7,col="coral",pch=19)
 lines(seq(1990,2030),rep(45,length(seq(1990,2030))),lty=2,lwd=2,col="green")
+legend("topright",legend=c("Old predictions","New predictions"),col=c("red","coral"),pch=19)
 ```
 
 
@@ -4495,5 +4334,4 @@ From this section's LTS model, which tries to robustify a linear model, we find 
 
 This could be understood as the possibility for our project to choose the LTS model as a final predictor for the GHG emissions. A balanced approach between robustness and accuracy should be taken into account. Both models seem valid enough.
 
-
-
+Even the predictions made by quitting the outliers from the non-renewable sources datasets are still very similar to the one obtained with the original data, so all this evidence makes us confidently say that our models and predictions are quite robust, since they are not influenced that much by the presence of outlying observations.
