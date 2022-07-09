@@ -3788,6 +3788,8 @@ plot(consump.fossils.diff.s[,1:5], col=ifelse(1:N%in%mcd_best.1,"black","red"),p
 
 # Which are the outliers?
 rownames(consump.fossils.diff.s)[!(1:N%in%mcd_best.1)]
+# And the cases considered outliers from distance plots?
+rownames(consump.fossils.diff.s)[!(fit_MCD.1$mcd.wt)]
 ```
 
 
@@ -3807,11 +3809,16 @@ mcd_best.2 <- fit_MCD.2$best
 
 N <- nrow(sd.consump.nr.1991)
 p <- ncol(sd.consump.nr.1991)
-pairs(sd.consump.nr.1991[,1:3], col=ifelse(1:N%in%mcd_best.2,"black","red"), pch=19)
+pairs(sd.consump.nr.1991[,1:3], col=ifelse(fit_MCD.2$mcd.wt,"black","red"), pch=19)
 
 # Which are the outliers?
 rownames(sd.consump.nr.1991)[!(1:N%in%mcd_best.2)]
+# And the cases considered outliers from distance plots?
+rownames(sd.consump.nr.1991)[!(fit_MCD.2$mcd.wt)]
+```
 
+
+```{r}
 ## Try the former method for each year 1991 - 2019 to see which is the most repeated outliers
 
 nr_outliers_mcd <- function(year, alpha=.75,plott=F){
@@ -3832,7 +3839,7 @@ nr_outliers_mcd <- function(year, alpha=.75,plott=F){
     }
     
     # Which are the outliers?
-    return(rownames(sd.consump.nr.aux)[!(1:N%in%mcd_best.aux)])
+   return(rownames(sd.consump.nr.aux)[!(fit_MCD.aux$mcd.wt)])
 }
 
 # Test for 1991
@@ -3848,7 +3855,10 @@ for(i in 1991:2019){
 outl_occ <- table(outliers)
 outl_occ.sort <- outl_occ[order(outl_occ, decreasing = T)]
 outl_occ.sort[1:5] # Top 5 outliers
+```
 
+
+```{r}
 ### Plots
 
 top5.outl <- which(rownames(sd.consump.ff.diff) %in% names(outl_occ.sort[1:5])) # Get top 5 most repeated outliers
@@ -3860,7 +3870,6 @@ pairs(sd.consump.nr.1991[,1:3], col=ifelse(1:N%in%top5.outl,"red","black"), pch=
 # QQplots
 # Scree plot
 plot(fit_MCD.2, classic=TRUE)
-rownames(sd.consump.nr.1991)[c(17,9,16,36)]
 
 ```
 
@@ -3916,7 +3925,7 @@ gdpp_outliers_mcd <- function(year, alpha=.75, plott=F){
     }
     
     # Which are the outliers?
-    return(rownames(sd.gdpp.aux)[!(1:N%in%mcd_best.aux)])
+    return(rownames(sd.gdpp.aux)[!(fit_MCD.aux$mcd.wt)]) 
 }
 
 # Test for 1991
@@ -3981,9 +3990,9 @@ rownames(nr.past.preds)[!(fit_MCD.4$mcd.wt)]
 ```
 
 ```{r}
-plot(seq(1991,2030), nr.past.preds[,1], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19)
-plot(seq(1991,2030), nr.past.preds[,2], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19)
-plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19)
+plot(seq(1991,2030), nr.past.preds[,1], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Oil&Petr.")
+plot(seq(1991,2030), nr.past.preds[,2], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Fossil Fuels")
+plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Natual Gas")
 ```
 There is a clear swamping effect going on since not all 9 years seem to be real outliers. The year with index 20 is a clear outlier while indices 16, 19 or 17 could also be considered as outliers, but by inspecting individual plots, does not look like it.
 
@@ -4045,7 +4054,7 @@ rownames(ghg.past.preds)[!(fit_MCD.6$mcd.wt)]
 
 ## b.2. Test for YEAR outliers without predictions
 
-Let's try to find outlying years from our NRE consumption data which is ???.
+Let's try to find outlying years from our NRE consumption data which is the base of our prediction models.
 After finding outlying years the idea is to retrain our models and compare them to our original ones.
 
 ### b.2.1. Outliers in NRE (training data)
@@ -4087,9 +4096,9 @@ rownames(nre.diff.sd.total)[!(fit_MCD.7$mcd.wt)]
 There is a clear swamping going on if we take all 1-alpha outlying data since we can only see two years in the distance plot that could be tagged as outliers (not all 7). This can also be seen in the individual plots of NRE energies
 
 ```{r}
-plot(seq(1991,2019), nre.diff.sd.total[,1], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19)
-plot(seq(1991,2019), nre.diff.sd.total[,2], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19)
-plot(seq(1991,2019), nre.diff.sd.total[,3], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19)
+plot(seq(1991,2019), nre.diff.sd.total[,1], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Oil&Petr.")
+plot(seq(1991,2019), nre.diff.sd.total[,2], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Fossil Fuels")
+plot(seq(1991,2019), nre.diff.sd.total[,3], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Natural Gas")
 
 ```
 
