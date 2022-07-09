@@ -4352,94 +4352,139 @@ lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="darkgrey",lty=2)
 
 ## c. Robust linear models
 
-### c.1. Least Median Squares Regression
+Idea: use Robust Linear models on our final predictor i.e. GHG ~ RE. This makes a lot of sense since our original model is a linear one. We expect for these models to act not too worse than the original lm. This means we will try to obtain inference by using this methods and our original data: NOT the "robust" dataset(s)
+
+### c.1. LMS + LTS on final model 
+
+Lets take our original predictions for renewable energy consumption from the Core part of our project.
 
 ```{r}
+plot(vec_ghg.diff)
+```
 
-### LMR
-# Core 1. EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
-fit_lms.1 <- lmsreg(oil_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu,
-                           data = vec_oil)
 
-hist(fit_lms.1$residuals)
-qqnorm(fit_lms.1$residuals)
-shapiro.test(fit_lms.1$residuals)
+Now, let's look how robust linear regressors act with this data and compare it with the original LM model:
 
-fit_lms.2 <- lmsreg(fossil_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu,
-                           data = vec_fossil)
+```{r}
+fit_lms <- lmsreg(value_ghg ~ value_re, data = vec_ghg.diff)
 
-hist(fit_lms.2$residuals)
-qqnorm(fit_lms.2$residuals)
-shapiro.test(fit_lms.2$residuals)
+hist(fit_lms$residuals)
+qqnorm(fit_lms$residuals)
+shapiro.test(fit_lms$residuals)
+```
 
-fit_lms.3 <- lmsreg(gas_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu,
-                           data = vec_gas)
+```{r}
+Acf(fit_lms$residuals,main="Residuals Acf")
 
-hist(fit_lms.3$residuals)
-qqnorm(fit_lms.3$residuals)
-shapiro.test(fit_lms.3$residuals)
+Pacf(fit_lms$residuals,main="Residuals Pacf")
+```
 
-# Core 2. DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
-fit_lms.4 <- lmsreg(dif_oil_eu ~ dif_gdp_eu + dif_pop_eu + dif_gdp_eu*dif_pop_eu,data = vec_oil.diff)
 
-hist(fit_lms.4$residuals)
-qqnorm(fit_lms.4$residuals)
-shapiro.test(fit_lms.4$residuals)
 
-fit_lms.5 <- lmsreg(dif_fossil_eu ~ dif_gdp_eu + dif_pop_eu + dif_gdp_eu*dif_pop_eu, data = vec_fossil.diff)
+In the robustbase documentation we can find a note : "We strongly recommend using lmrob() instead of ltsReg [...]"
+```{r}
+fit_lts <- lmrob(value_ghg ~ value_re, data = vec_ghg.diff, alpha=.5)
 
-hist(fit_lms.5$residuals)
-qqnorm(fit_lms.5$residuals)
-shapiro.test(fit_lms.5$residuals)
+summary(fit_lts)
 
-fit_lms.6 <- lmsreg(dif_gas_eu ~ dif_gdp_eu + dif_pop_eu + dif_gdp_eu*dif_pop_eu,
-                           data = vec_gas.diff)
+hist(fit_lts$residuals)
+shapiro.test(fit_lts$residuals)
 
-hist(fit_lms.6$residuals)
-qqnorm(fit_lms.6$residuals)
-shapiro.test(fit_lms.6$residuals)
+plot(fit_lts)
+```
+```{r}
+Acf(fit_lts$residuals,main="Residuals Acf")
+
+Pacf(fit_lts$residuals,main="Residuals Pacf")
+```
+
+Sum of square residuals for each estimator and R-squared
+```{r}
+sum(ghg.l$residuals^2)
+sum(fit_lms$residuals^2)
+sum(fit_lts$residuals^2)
+
+
+summary(fit_lts)
+summary(ghg.l)
+```
+
+
+Plot original regression vs new regressions
+```{r}
+newdata=with(vec_ghg.diff,seq(min(value_re),max(value_re),by=1))
+newdata=data.frame(value_re=newdata)
+
+newdata.rob = with(vec_ghg.diff,seq(min(value_re),max(value_re),by=200)) 
+newdata.rob =data.frame(value_re=newdata.rob)
+
+ghg.reg.lms=predict(fit_lms, newdata=newdata.rob, se=T)
+ghg.reg.lts=predict(fit_lts, newdata=newdata.rob, se=T)
+
+se.bands.lts=cbind(ghg.reg.lts$fit +2* ghg.reg.lts$se.fit ,ghg.reg.lts$fit -2* ghg.reg.lts$se.fit)
+```
+
+
+```{r}
+with(vec_ghg.diff,plot(value_re,value_ghg,main="Diff ghg vs diff renewables"))
+
+lines(newdata$value_re, ghg.reg$fit, col="green",lwd=2)
+matlines(newdata$value_re, se.bands,col="green",lwd=1,lty=2)
+
+lines(newdata.rob$value_re, ghg.reg.lms,col="blue",lwd=2)
+# matlines(newdata$value_re, se.bands.lms,col="green",lwd=1,lty=2)
+
+lines(newdata.rob$value_re, ghg.reg.lts$fit,col="lightblue",lwd=2)
+matlines(newdata.rob$value_re, se.bands.lts, col="lightblue",lwd=1,lty=2)
 
 ```
 
-### c.2. Least Trimmed Squares Regression
+The LTS model seems to be very similar by looking at the graph above. And their Sum of Square residuals is also very close, while the LMS estimator yields a worse fit in our model
+
+But by looking at the Adjusted R-squared of the LM model, it has a higher value (0.13) than the LTS model (0.08).
+
+Even though it seems that our LTS model will not improve our original LM model, let us take a look at its predictions:
 
 ```{r}
-# Core 1. EU_NON_RENEWABLE CONSUMPTIONS ~ EU_GDP + EU_POPULATION + EU_GDP:EU_POPULATION
-fit_lms.7 <-  ltsReg(oil_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu, alpha=alpha, mcd=TRUE, data = vec_oil)
+#predictions
+ghg.lts.preds <- predict(fit_lts, newdata=vec_ghg_pred.diff, se=T)
 
-hist(fit_lms.7$residuals)
-qqnorm(fit_lms.7$residuals)
-shapiro.test(fit_lms.7$residuals)
+with(vec_ghg.diff, plot(seq(1991,2019) ,value_ghg ,xlim=c(1990,2030),cex =.7,pch=19,xlab="Year",ylab="Diff percentage" , col =" darkgrey ",main='Prediction - Ghg Emissions'))
+# Original Predictions
+points(seq(2020,2030),ghg.l.preds$fit ,cex=0.7,pch=19, col ="green")
+lines(seq(1991,2019),ghg.l$fitted.values,lwd=2,col="green")
+# New predictions LTS
+points(seq(2020,2030),ghg.lts.preds$fit ,cex=0.7,pch=19, col ="lightblue")
+lines(seq(1991,2019),fit_lts$fitted.values,lwd=2,col="lightblue")
 
-fit_lms.8 <- ltsReg(fossil_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu, alpha=alpha, mcd=TRUE, data = vec_fossil)
-
-hist(fit_lms.8$residuals)
-qqnorm(fit_lms.8$residuals)
-shapiro.test(fit_lms.8$residuals)
-
-fit_lms.9 <- ltsReg(gas_eu ~ gdp_eu + pop_eu + gdp_eu*pop_eu, alpha=alpha, mcd=TRUE, data = vec_gas)
-
-hist(fit_lms.9$residuals)
-qqnorm(fit_lms.9$residuals)
-shapiro.test(fit_lms.9$residuals)
-
-# Core 2. DIFF_NON_RENEWABLE CONSUMPTIONS ~ DIFF_EU_GDP + DIFF_EU_POPULATION + DIFF_EU_GDP:DIFF_EU_POPULATION
-fit_lms.10 <- ltsReg(dif_oil_eu ~ dif_gdp_eu + dif_pop_eu + dif_gdp_eu*dif_pop_eu,alpha=alpha, mcd=TRUE,data = vec_oil.diff)
-
-hist(fit_lms.10$residuals)
-qqnorm(fit_lms.10$residuals)
-shapiro.test(fit_lms.10$residuals)
-
-fit_lms.11 <- ltsReg(dif_fossil_eu ~ dif_gdp_eu + dif_pop_eu + dif_gdp_eu*dif_pop_eu,alpha=alpha, mcd=TRUE, data = vec_fossil.diff)
-
-hist(fit_lms.11$residuals)
-qqnorm(fit_lms.11$residuals)
-shapiro.test(fit_lms.11$residuals)
-
-fit_lms.12 <- ltsReg(dif_gas_eu ~ dif_gdp_eu + dif_pop_eu + dif_gdp_eu*dif_pop_eu, alpha=alpha, mcd=TRUE, data = vec_gas.diff)
-
-hist(fit_lms.12$residuals)
-qqnorm(fit_lms.12$residuals)
-shapiro.test(fit_lms.12$residuals)
+lines(seq(1991,2030,1/3),rep(0,length(seq(1991,2030,1/3))),col="darkgrey",lty=2)
 ```
+
+
+```{r}
+
+deltas.lts=as.numeric(ghg.lts.preds$fit)
+Percentage_emissions.lts=ghg[30,1]+cumsum(deltas.lts)
+Percentage_decrease.lts=as.numeric(100-Percentage_emissions.lts[11])
+
+c(Percentage_emissions.lts, Percentage_emissions)
+c(Percentage_decrease.lts, Percentage_decrease)
+
+```
+
+```{r}
+with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.7,pch=19,xlab="Year",ylab="Percentage" ,main='Prediction - Ghg Emissions'))
+points(seq(2020,2030),Percentage_emissions, cex=.7,col="red",pch=19)
+points(seq(2020,2030),Percentage_emissions.lts,cex=.7,col="coral",pch=19)
+lines(seq(1990,2030),rep(45,length(seq(1990,2030))),lty=2,lwd=2,col="green")
+```
+
+
+We find that the predictions obtained by using the LTS estimator are almost the same, even a little more conservative since the decrease is a little less tilted than the LM one.
+
+From this section's LTS model, which tries to robustify a linear model, we find that, since only one outlier (index 19) is trimmed away, there is almost no difference between our original LM model and this new one. 
+
+This could be understood as the possibility for our project to choose the LTS model as a final predictor for the GHG emissions. A balanced approach between robustness and accuracy should be taken into account. Both models seem valid enough.
+
+
 
