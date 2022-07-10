@@ -3717,7 +3717,7 @@ library(RobStatTM)
 ```
 
 
-## a. Test for COUNTRY outliers in diff dataset 
+## Test for COUNTRY outliers in diff dataset 
 
 Objective: Try to spot the most extreme cases (countries) in our dataset(s), where our tests could struggle the most. 
 
@@ -3750,7 +3750,7 @@ alpha <- .75
 ```
 
 
-### a.1. For Non-renewable energy consumption
+### For Non-renewable energy consumption
 
 This approach consists in representing each country as an independent sample of p dimensions, but this time, p corresponds to the value of each energy type for each year (N=Countries, p=energy sources).
 This would mean we would obtain several country outliers for each year. A possible approach to join the information on outliers for all years would be counting how many times each country has been classified as an outlier. This way we would obtain a rank of the most outlying countries in our dataset.
@@ -3846,7 +3846,8 @@ This would mean transposing our data matrix (now the columns would be energy sou
 
 
 A problem arises from this last proposal: should we include in the year axis the predicted values for future values? We will try both options, but we should take into account that NOT including the future values would mean we could try to extract the outliers from our original dataset and retrain our models from a “new” dataset.
-## b.1 Test for YEAR outliers with predictions
+
+## Test for YEAR outliers with predictions
 
 O&P + FF + NG (training + prediction)
 
@@ -3881,19 +3882,19 @@ rownames(nr.past.preds)[!(fit_MCD.4$mcd.wt)]
 ```
 
 ```{r}
-plot(seq(1991,2030), nr.past.preds[,1], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Oil&Petr.")
-plot(seq(1991,2030), nr.past.preds[,2], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Fossil Fuels")
-plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Natual Gas")
+plot(seq(1991,2030), nr.past.preds[,1], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Oil&Petr.", xlab="Years (1991-2019)")
+plot(seq(1991,2030), nr.past.preds[,2], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Fossil Fuels", xlab="Years (1991-2019)")
+plot(seq(1991,2030), nr.past.preds[,3], col=ifelse(fit_MCD.4$mcd.wt,"black","red"),pch=19,ylab="Natual Gas", xlab="Years (1991-2019)")
 ```
 There is a clear swamping effect going on since not all 9 years seem to be real outliers. The year with index 20 is a clear outlier while indices 16, 19 or 17 could also be considered as outliers, but by inspecting individual plots, does not look like it.
 
 
-## b.2. Test for YEAR outliers without predictions
+## Test for YEAR outliers without predictions
 
 Let's try to find outlying years from our Non-Renewable consumption data which is the base of our prediction models.
 After finding outlying years the idea is to retrain our models and compare them to our original ones.
 
-### b.2.1. Outliers in NRE (training data)
+### Outliers in NRE (training data)
 
 The idea behind this part is to retrain our models without the outliers in our original dataset.
 
@@ -3932,9 +3933,9 @@ rownames(nre.diff.sd.total)[!(fit_MCD.7$mcd.wt)]
 There is a clear swamping going on if we take all 1-alpha outlying data since we can only see two years in the distance plot that could be tagged as outliers (not all 7). This can also be seen in the individual plots of NRE energies
 
 ```{r}
-plot(seq(1991,2019), nre.diff.sd.total[,1], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Oil&Petr.")
-plot(seq(1991,2019), nre.diff.sd.total[,2], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Fossil Fuels")
-plot(seq(1991,2019), nre.diff.sd.total[,3], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Natural Gas")
+plot(seq(1991,2019), nre.diff.sd.total[,1], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Oil&Petr.", xlab="Years (1991-2019)")
+plot(seq(1991,2019), nre.diff.sd.total[,2], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Fossil Fuels", xlab="Years (1991-2019)")
+plot(seq(1991,2019), nre.diff.sd.total[,3], col=ifelse(fit_MCD.7$mcd.wt,"black","red"),pch=19,ylab="Natural Gas", xlab="Years (1991-2019)")
 
 ```
 
@@ -3952,7 +3953,7 @@ Both have been done already. With the second one we obtain 7 outliers, while wit
 
 We can infer that the extra outliers from section b.1.1. are selected as such because of the extra-centrality that the predictions of NRE consumptions add to the dataset. It is clear that a swamping effect is taking place because some variabilities are amplified and falsely tagged as outlying. 
 
-### b.2.2. Redo DIFF_RENEWABLES ~ DIFF_NONRENEWABLES model
+### Redo DIFF_RENEWABLES ~ DIFF_NONRENEWABLES model
 
 ```{r}
 # Join all energies for common DF
@@ -4060,7 +4061,7 @@ renew.predictions.rob=renew.predictions.rob[1,as.character(seq(2020,2030))]
 
 
 
-### b.2.3. Redo DIFF_GHG ~ DIFF_RENEWABLES model
+### Redo DIFF_GHG ~ DIFF_RENEWABLES model
 
 Create train dataset from new predictions with renewable sources without outlying years
 ```{r}
@@ -4104,7 +4105,7 @@ ghg.rob.preds <- predict(ghg.rob, newdata=vec_ghg_pred.diff.2, se=T)
 
 ```
 
-### b.2.4. Comparison with original models
+### Comparison with original models
 
 Plot new vs past predictions of RE ~ NRE:
 ```{r}
@@ -4192,7 +4193,7 @@ legend("topright",legend=c("Old predictions","New predictions"),col=c("red","cor
 
 Fortunately predictions look very similar to the ones made on the complete datasets, both visually and numerically.
 
-## c. Robust linear models
+## Robust linear models
 
 Idea: use Robust Linear models on our final predictor i.e. GHG ~ RE. This makes a lot of sense since our original model is a linear one. We expect for these models to act not too worse than the original lm. This means we will try to obtain inference by using this methods and our original data: NOT the "robust" dataset(s)
 
@@ -4200,7 +4201,7 @@ We will be applying the Least Median Squares (LMS) and Least Trimmed Squares (LT
 
 Contrary to the course’s labs, we decide to use lmrob(.) instead of ltsReg(.) following the robustbase package documentation’s advice (ref): "We strongly recommend using lmrob(.) instead of ltsReg(.) 
 
-### c.1. LMS + LTS on final model 
+### LMS + LTS on final model 
 
 Lets take our original predictions for renewable energy consumption from the Core part of our project.
 
