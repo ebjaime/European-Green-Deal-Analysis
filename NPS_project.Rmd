@@ -2813,6 +2813,7 @@ shapiro.test(consump.oil.petr.gam.3$residuals)
 
 Let's try to quit two smooth terms at a time
 ```{r}
+#linear gdp and interaction
 consump.oil.petr.gam.1 <- lm(dif_oil_eu ~ dif_gdp_eu + bs(dif_pop_eu) + dif_gdp_eu:dif_pop_eu,data = vec_oil.diff) 
 
 summary(consump.oil.petr.gam.1)
@@ -2823,7 +2824,8 @@ shapiro.test(consump.oil.petr.gam.1$residuals)
 ```
 
 ```{r}
-consump.oil.petr.gam.2 <- lm(dif_oil_eu ~ dif_gdp_eu + bs(dif_pop_eu) + dif_gdp_eu:dif_pop_eu,data = vec_oil.diff) 
+#linear pop and interaction
+consump.oil.petr.gam.2 <- lm(dif_oil_eu ~ bs(dif_gdp_eu) + dif_pop_eu + dif_gdp_eu:dif_pop_eu,data = vec_oil.diff) 
 
 summary(consump.oil.petr.gam.2)
 
@@ -2833,6 +2835,7 @@ shapiro.test(consump.oil.petr.gam.2$residuals)
 ```
 
 ```{r}
+#linear gdp and population
 consump.oil.petr.gam.3 <- lm(dif_oil_eu ~ dif_gdp_eu + dif_pop_eu + bs(I(dif_gdp_eu*dif_pop_eu)),data = vec_oil.diff) 
 
 summary(consump.oil.petr.gam.3)
@@ -2890,7 +2893,24 @@ Pacf(
 )
 ```
 
-Note that it is quite strange that we should not reject the null hypothesis of the fundamental test of significance, while we reject the null hypothesis of the singular tests. Since the p-value of the fundamental test is just slightly above 0.05, we overlook this fact and consider this as the final model for the oil and petroleum products.
+Note that it is quite strange that we should not reject the null hypothesis of the fundamental test of significance, while we reject the null hypothesis of the singular tests. Therefore we have to check the significance of the whole model, still exploiting a permutational test.
+```{r}
+#global test of significance 
+T0_glob <- summary(consump.oil.petr.gam)$f[1]
+n=dim(vec_oil.diff)[1]
+T_H0glob <- numeric(B)
+set.seed(seed)
+B=1000
+for(perm in 1:B){
+  permutazione <- sample(n)
+  Y.perm.glob <- vec_oil.diff$dif_oil_eu[permutazione]
+  T_H0glob[perm] <- summary(lm(Y.perm.glob ~ dif_gdp_eu + dif_pop_eu ,data = vec_oil.diff))$f[1]   }
+sum(T_H0glob>=T0_glob)/B
+
+```
+
+The model is significant, so we can confidently proceed.
+
 
 ### Fossils
 
@@ -3807,7 +3827,7 @@ nr_outliers_mcd <- function(year, alpha=.75,plott=F){
 }
 
 # Test for 1991
-nr_outliers_mcd(1991,plott=T)
+nr_outliers_mcd(1991)
 nr_outliers_mcd(1992)
 
 outliers <- NULL
@@ -4176,8 +4196,11 @@ deltas.rob=as.numeric(ghg.rob.preds$fit)
 Percentage_emissions.rob=ghg[30,1]+cumsum(deltas.rob)
 Percentage_decrease.rob=as.numeric(100-Percentage_emissions.rob[11])
 
+
 Percentage_emissions.rob
-Percentage_decrease.rob
+Percentage_emissions
+
+c(Percentage_decrease.rob,Percentage_decrease)
 
 ```
 
@@ -4185,10 +4208,10 @@ Plot predictions
 ```{r}
 with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.7,xlab="Year",ylab="Percentage" ,pch=16, col =" darkgrey ",main='Prediction - Ghg Emissions'))
 points(seq(2020,2030),Percentage_emissions,cex=1,pch=16,col="red")
-points(seq(2020,2030), Percentage_emissions.rob, cex=1,pch=17,col="coral")
+points(seq(2020,2030), Percentage_emissions.rob, cex=1,pch=17,col="gold1")
 lines(seq(1990,2030),rep(45,length(seq(1990,2030))),col="green",lty=2,lwd=2)
 
-legend("topright",legend=c("Old predictions","New predictions"),col=c("red","coral"),pch=16)
+legend("topright",legend=c("Old predictions","New predictions"),col=c("red","gold1"),pch=16)
 ```
 
 Fortunately predictions look very similar to the ones made on the complete datasets, both visually and numerically.
@@ -4323,9 +4346,9 @@ c(Percentage_decrease.lts, Percentage_decrease)
 ```{r}
 with(ghg, plot(seq(1990,2019) ,ValueGhg ,xlim=c(1990,2030),ylim=c(40,100),cex =.7,pch=19,xlab="Year",ylab="Percentage" ,main='Prediction - Ghg Emissions'))
 points(seq(2020,2030),Percentage_emissions, cex=.7,col="red",pch=19)
-points(seq(2020,2030),Percentage_emissions.lts,cex=.7,col="coral",pch=19)
+points(seq(2020,2030),Percentage_emissions.lts,cex=.7,col="gold1",pch=19)
 lines(seq(1990,2030),rep(45,length(seq(1990,2030))),lty=2,lwd=2,col="green")
-legend("topright",legend=c("Old predictions","New predictions"),col=c("red","coral"),pch=19)
+legend("topright",legend=c("Old predictions","New predictions"),col=c("red","gold1"),pch=19)
 ```
 
 
