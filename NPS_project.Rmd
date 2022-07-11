@@ -47,6 +47,9 @@ B=10000
 seed=42
 set.seed(seed)
 ```
+# Abstract
+
+During the last few decades, the European Union has made several proposals to stimulate the creation of clean energy inside its country members (Kyoto protocol, Paris Agreement, European Green Deal, Clean Energy for all Europeans, 2030 Climate and Energy EU objectives…) with the common objective of having a total renewable energy future. Several projects have been carried out trying to predict whether these objectives are plausible in the near future. A nonparametric approach seemed us like an interesting path which could help analyze the effort made regarding this cause since it permits to obtain consistent results under few conditions. We focused our attention on the European Green Deal (2020) that European Commission President Ursula von der Leyen considered “like man landing on the moon” for Europe. In fact this pact would make Europe the first continent to achieve Climate Neutrality by 2050 and in particular it enhances Paris objective with the new target of 55% cut of greenhouse gases emissions by 2030 respect to 1990. Given the great importance for Europe that this pact would have if it were respected we have set ourselves the goal of predicting whether this Green Deal target of a 55% cut in greenhouse gases emissions (Ghg) by 2030 respect to 1990 levels is feasible. To do so we analyzed the European renewable transition and forecasted future renewable energies and Ghg values, taking advantage of current and past knowledge of data about production, consumptions and greenhouse gases. Since all energy related information for every EU member is open to the public in the EU’s Eurostat portal, and all of its datasets contain clean and reliable information, we deemed this project very interesting and useful to draw further attention to these issues while using the nonparametric techniques learnt. We worked on a variety of time series datasets about European energy consumption and of Ghg emissions in the time window from 1990 to the present (see References). To properly predict future renewable energy and Ghg values and to make our models more robust we also used population and Gross Domestic Product (GDP) reliable predictions (see References).
 
 ### Preprocessing of data
 
@@ -2041,7 +2044,7 @@ lines(seq(2005,2019,0.5),model_gam_solar$fitted.values,lwd=2,col="darkorange",lt
 legend("topleft",legend=c("Wind","Hydro","Solar"),col=c("green","blue","darkorange"),pch=1)
 ```
 
-We can clearly see that the electricity production coming from renewable sources is effectively growing and in particular wind is the one that is developing more than the others.
+We can clearly see that the electricity production coming from renewable sources is effectively growing and in particular wind and solar are developing at the same rate, while hydro is the most stable and developed electricity source.
 
 
 ## Third Target: Analyse the current European renewable energy network.
@@ -4359,3 +4362,15 @@ From this section's LTS model, which tries to robustify a linear model, we find 
 This could be understood as the possibility for our project to choose the LTS model as a final predictor for the GHG emissions. A balanced approach between robustness and accuracy should be taken into account. Both models seem valid enough.
 
 Even the predictions made by quitting the outliers from the non-renewable sources datasets are still very similar to the one obtained with the original data, so all this evidence makes us confidently say that our models and predictions are quite robust, since they are not influenced that much by the presence of outlying observations.
+
+# Conclusion
+
+Global warming is happening and it is strongly tangible. It is not a fantasy of some crazy scientist or some conspiracy theorist. It is a sad reality that will have heavy consequences on everybody’s life, if we don’t act immediately. It is everybody’s responsibility, from the major multinational companies to the simple citizens, to become aware of the problem and to take the appropriate countermeasures.
+
+With the recent European agreements, our leaders showed the right intention of putting this problem in the spotlight, to guarantee a sustainable future for our planet. This, however, doesn’t seem to be enough.
+
+Our work, that highlighted the non-feasibility of the Green Deal target of a 55% cut in Greenhouse gases emissions by 2030 respect to 1990, wants to be yet another raised alarm, to be added to the already long list of scientific researches on this subject.
+
+We are delighted to have had the possibility to apply the Nonparametric Statistics course tools to better grasp this trending and so important topic.
+
+Special thanks to all the professors for the opportunity to get our hands dirty, analysing real data, in order to develop a project with concrete and useful conclusions.
