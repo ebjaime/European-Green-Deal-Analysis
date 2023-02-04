@@ -28,5 +28,4 @@ a 32% cut in Ghg emissions. It is therefore clear that much more effort is neede
 crucial challenge. Our work wants to be yet another raised alarm, to be added to the already long list of scientific
 researches on this subject.
 
-Nonparametric Statistics Project 2021-22
-[NPS @ Polimi - 2021-22]
+The project is part of the 2021-22 course [055702 - NONPARAMETRIC STATISTICS](https://www4.ceda.polimi.it/manifesti/manifesti/controller/ManifestoPublic.do?EVN_DETTAGLIO_RIGA_MANIFESTO=evento&aa=2021&k_cf=225&k_corso_la=487&k_indir=MST&codDescr=055702&lang=IT&semestre=1&idGruppo=4338&idRiga=271238), by Politecnico di Milano university. 
