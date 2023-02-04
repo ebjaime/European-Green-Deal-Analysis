@@ -23,6 +23,10 @@ variety of time series datasets about European energy consumption and of Ghg emi
 window from 1990 to the present (see References). To properly predict future renewable energy and Ghg
 values and to make our models more robust we also used population and Gross Domestic Product
 (GDP) reliable predictions (see References).
+By means of nonparametric prediction tools, we highlighted the non-feasibility of the Green Deal target, obtaining
+a 32% cut in Ghg emissions. It is therefore clear that much more effort is needed, in order to properly tackle this
+crucial challenge. Our work wants to be yet another raised alarm, to be added to the already long list of scientific
+researches on this subject.
 
 Nonparametric Statistics Project 2021-22
 [NPS @ Polimi - 2021-22]
